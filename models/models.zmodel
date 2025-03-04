@@ -1,0 +1,208 @@
+enum UserStatus {
+    INVITED
+    VERIFIED
+}
+
+model User {
+    id                  String             @id @default(uuid())
+    name                String?
+    email               String?            @unique
+    pictureUrl          String?            @default('https://i.imgur.com/ZdJSK3Y.jpeg')
+    tokenInvitation     String?
+
+    stripeCustomerId    String?
+
+    status              UserStatus         @default(VERIFIED)
+
+    // this is the role of the user for the application
+    globalRole          String             @default('USER')
+    password            String?            @password @omit
+    createdAt           DateTime           @default(now())
+    updatedAt           DateTime           @updatedAt @default(now())
+
+    organizationRoles   OrganizationRole[]
+
+    pwaSubscriptions    PwaSubscription[]  @relation("user")
+
+    userRoles           UserRole[]         @relation("user")
+    tasksAsAssignedUser Task[]             @relation("assignedUser")
+    timeEntrys          TimeEntry[]        @relation("user")
+    expenses            Expense[]          @relation("user")
+
+    @@auth()
+    @@allow("all", auth().id == this.id)
+    @@allow('all', auth().globalRole == 'ADMIN')
+
+    //we only allow that user to register if they don't create an admin role
+    @@allow("create", globalRole != 'ADMIN')
+    @@allow("read", true)
+}
+
+model RoleData {
+
+    id          String     @id @default(uuid())
+    name        String
+    description String?
+
+    userRoles   UserRole[] @relation("role")
+    createdAt   DateTime   @default(now())
+    updatedAt   DateTime   @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model UserRole {
+
+    userId    String
+    user      User?     @relation(fields: [userId], references: [id], name: "user")
+    roleId    String
+    role      RoleData? @relation(fields: [roleId], references: [id], name: "role")
+    id        String    @id @default(uuid())
+
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Client {
+
+    id             String        @id @default(uuid())
+    name           String
+    email          String?
+    phone          String?
+    address        String?
+
+    organizationId String
+    organization   Organization? @relation(fields: [organizationId], references: [id], name: "organization")
+
+    matters        Matter[]      @relation("client")
+    createdAt      DateTime      @default(now())
+    updatedAt      DateTime      @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Matter {
+
+    id             String        @id @default(uuid())
+    title          String
+    description    String?
+    status         String?
+
+    clientId       String
+    client         Client?       @relation(fields: [clientId], references: [id], name: "client")
+    organizationId String
+    organization   Organization? @relation(fields: [organizationId], references: [id], name: "organization")
+
+    tasks          Task[]        @relation("matter")
+    timeEntrys     TimeEntry[]   @relation("matter")
+    expenses       Expense[]     @relation("matter")
+    createdAt      DateTime      @default(now())
+    updatedAt      DateTime      @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Task {
+
+    id             String      @id @default(uuid())
+    title          String
+    description    String?
+    status         String?
+    dueDate        String?
+
+    assignedUserId String?
+    assignedUser   User?       @relation(fields: [assignedUserId], references: [id], name: "assignedUser")
+    matterId       String
+    matter         Matter?     @relation(fields: [matterId], references: [id], name: "matter")
+
+    timeEntrys     TimeEntry[] @relation("task")
+    createdAt      DateTime    @default(now())
+    updatedAt      DateTime    @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model TimeEntry {
+
+    id          String   @id @default(uuid())
+    description String?
+    startTime   String?
+    endTime     String?
+    duration    String?
+
+    userId      String
+    user        User?    @relation(fields: [userId], references: [id], name: "user")
+    taskId      String?
+    task        Task?    @relation(fields: [taskId], references: [id], name: "task")
+    matterId    String
+    matter      Matter?  @relation(fields: [matterId], references: [id], name: "matter")
+
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Expense {
+
+    id          String   @id @default(uuid())
+    description String?
+    amount      String?
+    date        String?
+    receiptUrl  String?
+
+    userId      String
+    user        User?    @relation(fields: [userId], references: [id], name: "user")
+    matterId    String
+    matter      Matter?  @relation(fields: [matterId], references: [id], name: "matter")
+
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Organization {
+    id               String             @id @default(uuid())
+    name             String
+    pictureUrl       String?            @default('https://i.imgur.com/BgkFiid.jpeg')
+
+    stripeCustomerId String?
+
+    createdAt        DateTime           @default(now())
+    updatedAt        DateTime           @updatedAt @default(now())
+    roles            OrganizationRole[]
+
+    clients          Client[]           @relation("organization")
+    matters          Matter[]           @relation("organization")
+
+    @@allow('all', auth().globalRole == 'ADMIN')
+    @@allow('all', roles?[user == auth() && name == 'owner'])
+    @@allow('read', roles?[user == auth()])
+}
+
+model OrganizationRole {
+    id             String       @id @default(uuid())
+    name           String
+    createdAt      DateTime     @default(now())
+    updatedAt      DateTime     @updatedAt @default(now())
+
+    userId         String       @default(auth().id)
+    user           User         @relation(fields: [userId], references: [id])
+    organizationId String
+    organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+    @@allow('all', auth().globalRole == 'ADMIN')
+    @@allow('all', organization.roles?[user == auth() && name == 'owner'])
+    @@allow('create', organization.roles?[user == auth()] && name != 'owner')
+    @@allow('read', organization.roles?[user == auth()])
+    @@allow('delete', auth() == user)
+}
+
+model PwaSubscription {
+    id        String   @id @default(uuid())
+    content   String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt @default(now())
+
+    userId    String   @default(auth().id)
+    user      User     @relation(fields: [userId], references: [id], name: 'user')
+
+    @@allow("all", true)
+}
+
