@@ -75,6 +75,8 @@ model Client {
   organizationId String
   organization   Organization? @relation(fields: [organizationId], references: [id], name: "organization")
   matters        Matter[]      @relation("client")
+  invoices       Invoice[]     @relation("client")
+  stripeCustomerId String?     // For client payments
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @default(now()) @updatedAt()
 }
@@ -125,6 +127,10 @@ model TimeEntry {
   task        Task?    @relation(fields: [taskId], references: [id], name: "task")
   matterId    String
   matter      Matter?  @relation(fields: [matterId], references: [id], name: "matter")
+  invoiceId   String?
+  invoice     Invoice? @relation(fields: [invoiceId], references: [id], name: "invoice")
+  rate        String?  // Hourly rate for this time entry
+  amount      String?  // Calculated amount (rate * duration)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt()
 }
@@ -140,8 +146,48 @@ model Expense {
   user        User?    @relation(fields: [userId], references: [id], name: "user")
   matterId    String
   matter      Matter?  @relation(fields: [matterId], references: [id], name: "matter")
+  invoiceId   String?
+  invoice     Invoice? @relation(fields: [invoiceId], references: [id], name: "invoice")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt()
+}
+
+/// @@allow('all', true)
+model Invoice {
+  id              String        @id() @default(uuid())
+  invoiceNumber   String        @unique
+  clientId        String
+  client          Client?       @relation(fields: [clientId], references: [id], name: "client")
+  matterId        String
+  matter          Matter?       @relation(fields: [matterId], references: [id], name: "matter")
+  organizationId  String
+  organization    Organization? @relation(fields: [organizationId], references: [id], name: "organization")
+  amount          String
+  tax             String?
+  total           String
+  status          String        @default("DRAFT") // DRAFT, SENT, PAID, OVERDUE, CANCELLED
+  dueDate         String?
+  notes           String?
+  timeEntries     TimeEntry[]   @relation("invoice")
+  expenses        Expense[]     @relation("invoice")
+  payments        Payment[]     @relation("invoice")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt()
+}
+
+/// @@allow('all', true)
+model Payment {
+  id              String        @id() @default(uuid())
+  invoiceId       String
+  invoice         Invoice?      @relation(fields: [invoiceId], references: [id], name: "invoice")
+  amount          String
+  paymentMethod   String        // CREDIT_CARD, BANK_TRANSFER, CHECK, CASH, OTHER
+  paymentDate     String
+  transactionId   String?
+  status          String        @default("COMPLETED") // PENDING, COMPLETED, FAILED, REFUNDED
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt()
 }
 
 /// @@allow('all', auth().globalRole == 'ADMIN')
@@ -152,11 +198,14 @@ model Organization {
   name             String
   pictureUrl       String?            @default("https://i.imgur.com/BgkFiid.jpeg")
   stripeCustomerId String?
+  stripePublicKey  String?            // For client-side Stripe integration
+  stripeSecretKey  String?            // For server-side Stripe integration
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @default(now()) @updatedAt()
   roles            OrganizationRole[]
   clients          Client[]           @relation("organization")
   matters          Matter[]           @relation("organization")
+  invoices         Invoice[]          @relation("organization")
 }
 
 /// @@allow('all', auth().globalRole == 'ADMIN')

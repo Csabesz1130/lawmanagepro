@@ -2,11 +2,11 @@
 import { useLocation, useNavigate, useParams } from '@remix-run/react'
 import { Flex } from 'antd'
 import { ReactNode } from 'react'
+import { useUserContext } from '~/core/context'
 import { Leftbar } from './components/Leftbar'
 import { Mobilebar } from './components/Mobilebar'
 import { Topbar } from './components/Topbar'
 import { NavigationItem } from './types'
-import { useUserContext } from '~/core/context'
 
 interface Props {
   children: ReactNode
@@ -116,6 +116,21 @@ export const NavigationLayout: React.FC<Props> = ({ children }) => {
       onClick: () =>
         goTo(
           '/organizations/:organizationId/finance'.replace(
+            ':organizationId',
+            organization.id,
+          ),
+        ),
+    },
+
+    {
+      key: '/organizations/:organizationId/invoices',
+      label: 'Invoices',
+      position: 'leftbar',
+
+      isVisible: !!organization,
+      onClick: () =>
+        goTo(
+          '/organizations/:organizationId/invoices'.replace(
             ':organizationId',
             organization.id,
           ),

@@ -1,62 +1,172 @@
-import React, { useState } from 'react'
+import { useUserContext } from '@/core/context'
+import { Api } from '@/core/trpc'
+import { PageLayout } from '@/designSystem'
+import { useNavigate, useParams } from '@remix-run/react'
 import {
-  Typography,
-  Table,
+  Button,
+  Card,
+  Col,
   Form,
   Input,
   InputNumber,
-  Button,
+  message,
   Modal,
+  Row,
   Select,
+  Space,
+  Statistic,
+  Table,
   Tabs,
+  Tag,
+  Typography
 } from 'antd'
-const { Title, Text } = Typography
-const { TabPane } = Tabs
-import { useUserContext } from '@/core/context'
 import dayjs from 'dayjs'
-import { useLocation, useNavigate, useParams } from '@remix-run/react'
-import { useUploadPublic } from '@/plugins/upload/client'
-import { SocketClient } from '@/plugins/socket/client'
-import { Api } from '@/core/trpc'
-import { PageLayout } from '@/designSystem'
+import { useState } from 'react'
+const { Title, Text, Paragraph } = Typography
+const { TabPane } = Tabs
 
 export default function FinancialManagementPage() {
   const { organizationId } = useParams()
+  const navigate = useNavigate()
   const { user, checkOrganizationRole } = useUserContext()
   const [activeTab, setActiveTab] = useState('1')
 
-  const { data: expenses, isLoading: isLoadingExpenses } =
+  // Expenses
+  const { data: expenses, isLoading: isLoadingExpenses, refetch: refetchExpenses } =
     Api.expense.findMany.useQuery({
       where: { matter: { organizationId } },
       include: { user: true, matter: true },
     })
 
+  // Invoices
+  const { data: invoices, isLoading: isLoadingInvoices } =
+    Api.invoice.findMany.useQuery({
+      where: { organizationId },
+      include: { client: true, matter: true, payments: true },
+    })
+
+  // Time Entries
+  const { data: timeEntries, isLoading: isLoadingTimeEntries } =
+    Api.timeEntry.findMany.useQuery({
+      where: { matter: { organizationId } },
+      include: { user: true, matter: true },
+    })
+
+  // Attorneys
   const { data: attorneys } = Api.user.findMany.useQuery({
     where: {
       organizationRoles: { some: { organizationId, name: 'attorney' } },
     },
   })
 
+  // Matters
+  const { data: matters } = Api.matter.findMany.useQuery({
+    where: { organizationId },
+    include: { client: true },
+  })
+
   const [expenseForm] = Form.useForm()
   const [isModalVisible, setIsModalVisible] = useState(false)
+  const [stripeForm] = Form.useForm()
+  const [isStripeModalVisible, setIsStripeModalVisible] = useState(false)
 
   const { mutateAsync: createExpense } = Api.expense.create.useMutation()
+  const { mutateAsync: updateOrganization } = Api.organization.update.useMutation()
 
   const handleCreateExpense = async (values: any) => {
-    await createExpense({
-      data: {
-        ...values,
-        user: { connect: { id: user?.id } },
-        matter: { connect: { id: values.matterId } },
-      },
-    })
-    expenseForm.resetFields()
-    setIsModalVisible(false)
+    try {
+      await createExpense({
+        data: {
+          ...values,
+          userId: user?.id || '',
+          matterId: values.matterId,
+        },
+      })
+      message.success('Expense submitted successfully')
+      expenseForm.resetFields()
+      setIsModalVisible(false)
+      refetchExpenses()
+    } catch (error) {
+      message.error('Failed to submit expense')
+    }
+  }
+
+  const handleUpdateStripeKeys = async (values: any) => {
+    try {
+      await updateOrganization({
+        where: { id: organizationId },
+        data: {
+          stripePublicKey: values.stripePublicKey,
+          stripeSecretKey: values.stripeSecretKey,
+        },
+      })
+      message.success('Stripe API keys updated successfully')
+      setIsStripeModalVisible(false)
+    } catch (error) {
+      message.error('Failed to update Stripe API keys')
+    }
+  }
+
+  // Calculate financial statistics
+  const calculateStats = () => {
+    let totalBilled = 0
+    let totalPaid = 0
+    let totalOutstanding = 0
+    let totalExpenses = 0
+
+    if (invoices) {
+      invoices.forEach(invoice => {
+        const total = parseFloat(invoice.total)
+        totalBilled += total
+
+        if (invoice.status === 'PAID') {
+          totalPaid += total
+        } else if (invoice.status === 'SENT' || invoice.status === 'OVERDUE') {
+          totalOutstanding += total
+        }
+      })
+    }
+
+    if (expenses) {
+      expenses.forEach(expense => {
+        if (expense.amount) {
+          totalExpenses += parseFloat(expense.amount)
+        }
+      })
+    }
+
+    return {
+      totalBilled,
+      totalPaid,
+      totalOutstanding,
+      totalExpenses,
+    }
+  }
+
+  const stats = calculateStats()
+
+  // Get status tag color
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'DRAFT':
+        return 'default'
+      case 'SENT':
+        return 'processing'
+      case 'PAID':
+        return 'success'
+      case 'OVERDUE':
+        return 'error'
+      case 'CANCELLED':
+        return 'warning'
+      default:
+        return 'default'
+    }
   }
 
   const isFinancialAdmin = checkOrganizationRole('Financial Administrator')
   const isSeniorPartner = checkOrganizationRole('Senior Partner')
   const isManagingPartner = checkOrganizationRole('Managing Partner')
+  const canManageFinances = isFinancialAdmin || isSeniorPartner || isManagingPartner || user?.globalRole === 'ADMIN'
 
   return (
     <PageLayout layout="full-width">
@@ -64,14 +174,126 @@ export default function FinancialManagementPage() {
         <Title level={2}>
           <i className="las la-chart-line"></i> Financial Management
         </Title>
-        <Text>Manage expenses and view financial information.</Text>
+        <Text>Manage expenses, invoices, and view financial information.</Text>
+
+        {canManageFinances && (
+          <Card style={{ marginTop: 24, marginBottom: 24 }}>
+            <Row gutter={24}>
+              <Col span={6}>
+                <Statistic
+                  title="Total Billed"
+                  value={stats.totalBilled}
+                  precision={2}
+                  prefix="$"
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="Total Paid"
+                  value={stats.totalPaid}
+                  precision={2}
+                  prefix="$"
+                  valueStyle={{ color: '#3f8600' }}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="Outstanding"
+                  value={stats.totalOutstanding}
+                  precision={2}
+                  prefix="$"
+                  valueStyle={{ color: '#cf1322' }}
+                />
+              </Col>
+              <Col span={6}>
+                <Statistic
+                  title="Total Expenses"
+                  value={stats.totalExpenses}
+                  precision={2}
+                  prefix="$"
+                />
+              </Col>
+            </Row>
+          </Card>
+        )}
 
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
           style={{ marginTop: 24 }}
         >
-          <TabPane tab="Expenses" key="1">
+          <TabPane tab="Invoices" key="1">
+            <Space style={{ marginBottom: 16 }}>
+              <Button
+                type="primary"
+                onClick={() => navigate(`/organizations/${organizationId}/invoices`)}
+              >
+                <i className="las la-file-invoice-dollar"></i> Manage Invoices
+              </Button>
+
+              {canManageFinances && (
+                <Button onClick={() => setIsStripeModalVisible(true)}>
+                  <i className="las la-credit-card"></i> Configure Online Payments
+                </Button>
+              )}
+            </Space>
+
+            <Table
+              dataSource={invoices}
+              loading={isLoadingInvoices}
+              columns={[
+                {
+                  title: 'Invoice #',
+                  dataIndex: 'invoiceNumber',
+                  key: 'invoiceNumber',
+                },
+                {
+                  title: 'Client',
+                  dataIndex: ['client', 'name'],
+                  key: 'client',
+                },
+                {
+                  title: 'Matter',
+                  dataIndex: ['matter', 'title'],
+                  key: 'matter',
+                },
+                {
+                  title: 'Amount',
+                  dataIndex: 'total',
+                  key: 'total',
+                  render: total => `$${total}`,
+                },
+                {
+                  title: 'Status',
+                  dataIndex: 'status',
+                  key: 'status',
+                  render: status => (
+                    <Tag color={getStatusColor(status)}>{status}</Tag>
+                  ),
+                },
+                {
+                  title: 'Due Date',
+                  dataIndex: 'dueDate',
+                  key: 'dueDate',
+                  render: date => (date ? dayjs(date).format('YYYY-MM-DD') : '-'),
+                },
+                {
+                  title: 'Actions',
+                  key: 'actions',
+                  render: (_, record) => (
+                    <Button
+                      size="small"
+                      onClick={() => navigate(`/organizations/${organizationId}/invoices`)}
+                    >
+                      View
+                    </Button>
+                  ),
+                },
+              ]}
+            />
+          </TabPane>
+
+          <TabPane tab="Expenses" key="2">
             <Button
               onClick={() => setIsModalVisible(true)}
               style={{ marginBottom: 16 }}
@@ -106,12 +328,19 @@ export default function FinancialManagementPage() {
                   key: 'matter',
                 },
                 { title: 'User', dataIndex: ['user', 'name'], key: 'user' },
+                {
+                  title: 'Invoiced',
+                  key: 'invoiced',
+                  render: (_, record) => (
+                    record.invoiceId ? <Tag color="green">Yes</Tag> : <Tag color="orange">No</Tag>
+                  ),
+                },
               ]}
             />
 
             <Modal
               title="Submit Expense"
-              visible={isModalVisible}
+              open={isModalVisible}
               onCancel={() => setIsModalVisible(false)}
               footer={null}
             >
@@ -120,10 +349,18 @@ export default function FinancialManagementPage() {
                 onFinish={handleCreateExpense}
                 layout="vertical"
               >
-                <Form.Item name="description" rules={[{ required: true }]}>
+                <Form.Item
+                  name="description"
+                  label="Description"
+                  rules={[{ required: true, message: 'Please enter a description' }]}
+                >
                   <Input placeholder="Description" />
                 </Form.Item>
-                <Form.Item name="amount" rules={[{ required: true }]}>
+                <Form.Item
+                  name="amount"
+                  label="Amount"
+                  rules={[{ required: true, message: 'Please enter an amount' }]}
+                >
                   <InputNumber
                     placeholder="Amount"
                     min={0}
@@ -131,14 +368,24 @@ export default function FinancialManagementPage() {
                     style={{ width: '100%' }}
                   />
                 </Form.Item>
-                <Form.Item name="date" rules={[{ required: true }]}>
+                <Form.Item
+                  name="date"
+                  label="Date"
+                  rules={[{ required: true, message: 'Please select a date' }]}
+                >
                   <Input type="date" />
                 </Form.Item>
-                <Form.Item name="matterId" rules={[{ required: true }]}>
+                <Form.Item
+                  name="matterId"
+                  label="Matter"
+                  rules={[{ required: true, message: 'Please select a matter' }]}
+                >
                   <Select placeholder="Select Matter">
-                    {/* Populate with actual matters */}
-                    <Select.Option value="matter1">Matter 1</Select.Option>
-                    <Select.Option value="matter2">Matter 2</Select.Option>
+                    {matters?.map(matter => (
+                      <Select.Option key={matter.id} value={matter.id}>
+                        {matter.title} ({matter.client?.name})
+                      </Select.Option>
+                    ))}
                   </Select>
                 </Form.Item>
                 <Form.Item>
@@ -150,8 +397,47 @@ export default function FinancialManagementPage() {
             </Modal>
           </TabPane>
 
-          {(isSeniorPartner || isManagingPartner) && (
-            <TabPane tab="Attorney Information" key="2">
+          <TabPane tab="Time Entries" key="3">
+            <Table
+              dataSource={timeEntries}
+              loading={isLoadingTimeEntries}
+              columns={[
+                {
+                  title: 'Description',
+                  dataIndex: 'description',
+                  key: 'description',
+                },
+                {
+                  title: 'Duration',
+                  dataIndex: 'duration',
+                  key: 'duration',
+                  render: duration => `${duration} seconds`,
+                },
+                {
+                  title: 'Matter',
+                  dataIndex: ['matter', 'title'],
+                  key: 'matter',
+                },
+                { title: 'User', dataIndex: ['user', 'name'], key: 'user' },
+                {
+                  title: 'Amount',
+                  dataIndex: 'amount',
+                  key: 'amount',
+                  render: amount => (amount ? `$${amount}` : '-'),
+                },
+                {
+                  title: 'Invoiced',
+                  key: 'invoiced',
+                  render: (_, record) => (
+                    record.invoiceId ? <Tag color="green">Yes</Tag> : <Tag color="orange">No</Tag>
+                  ),
+                },
+              ]}
+            />
+          </TabPane>
+
+          {(isSeniorPartner || isManagingPartner || user?.globalRole === 'ADMIN') && (
+            <TabPane tab="Attorney Information" key="4">
               <Table
                 dataSource={attorneys}
                 columns={[
@@ -168,6 +454,51 @@ export default function FinancialManagementPage() {
             </TabPane>
           )}
         </Tabs>
+
+        {/* Stripe Configuration Modal */}
+        <Modal
+          title="Configure Online Payments"
+          open={isStripeModalVisible}
+          onCancel={() => setIsStripeModalVisible(false)}
+          footer={null}
+        >
+          <Form
+            form={stripeForm}
+            onFinish={handleUpdateStripeKeys}
+            layout="vertical"
+          >
+            <Paragraph>
+              Enter your Stripe API keys to enable online payments for clients.
+              You can find these in your Stripe dashboard.
+            </Paragraph>
+
+            <Form.Item
+              name="stripePublicKey"
+              label="Stripe Public Key"
+              rules={[{ required: true, message: 'Please enter your Stripe public key' }]}
+            >
+              <Input placeholder="pk_test_..." />
+            </Form.Item>
+
+            <Form.Item
+              name="stripeSecretKey"
+              label="Stripe Secret Key"
+              rules={[{ required: true, message: 'Please enter your Stripe secret key' }]}
+            >
+              <Input.Password placeholder="sk_test_..." />
+            </Form.Item>
+
+            <Paragraph type="secondary">
+              <i className="las la-info-circle"></i> Your keys are stored securely and used only for processing payments.
+            </Paragraph>
+
+            <Form.Item>
+              <Button type="primary" htmlType="submit">
+                Save Stripe Configuration
+              </Button>
+            </Form.Item>
+          </Form>
+        </Modal>
       </div>
     </PageLayout>
   )
