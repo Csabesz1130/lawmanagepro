@@ -42,6 +42,15 @@ model User {
   tasksAsAssignedUser Task[]             @relation("assignedUser")
   timeEntrys          TimeEntry[]        @relation("user")
   expenses            Expense[]          @relation("user")
+  knowledgeArticles   KnowledgeArticle[]
+  articleVersions     KnowledgeArticleVersion[]
+  precedentDocuments  PrecedentDocument[]
+  documentTemplates   DocumentTemplate[]
+  templateVersions    TemplateVersion[]
+  approvedTemplates   DocumentTemplate[] @relation("TemplateApprover")
+  contributions       UserContribution[]
+  comments            KnowledgeComment[]
+  recommendations     Recommendation[]
 }
 
 /// @@allow('all', true)
@@ -94,8 +103,10 @@ model Matter {
   tasks          Task[]        @relation("matter")
   timeEntrys     TimeEntry[]   @relation("matter")
   expenses       Expense[]     @relation("matter")
+  precedentDocuments PrecedentDocument[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @default(now()) @updatedAt()
+  knowledgeArticles KnowledgeArticle[]
 }
 
 /// @@allow('all', true)
@@ -204,6 +215,9 @@ model Organization {
   clients          Client[]           @relation("organization")
   matters          Matter[]           @relation("organization")
   invoices         Invoice[]          @relation("organization")
+  knowledgeArticles KnowledgeArticle[]
+  precedentDocuments PrecedentDocument[]
+  documentTemplates DocumentTemplate[]
 }
 
 /// @@allow('all', auth().globalRole == 'ADMIN')
@@ -246,4 +260,169 @@ model Activity {
   @@index([organizationId])
   @@index([matterId])
   @@index([timestamp])
+}
+
+// Knowledge Management Models
+model KnowledgeArticle {
+  id            String      @id @default(cuid())
+  title         String
+  content       String      @db.Text
+  practiceAreaId String
+  practiceArea  PracticeArea @relation(fields: [practiceAreaId], references: [id])
+  createdById   String
+  createdBy     User        @relation(fields: [createdById], references: [id])
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  versions      KnowledgeArticleVersion[]
+  tags          String[]
+  viewCount     Int         @default(0)
+  contributors  UserContribution[]
+  comments      KnowledgeComment[]
+}
+
+model KnowledgeArticleVersion {
+  id            String      @id @default(cuid())
+  articleId     String
+  article       KnowledgeArticle @relation(fields: [articleId], references: [id])
+  content       String      @db.Text
+  createdById   String
+  createdBy     User        @relation(fields: [createdById], references: [id])
+  createdAt     DateTime    @default(now())
+  changeLog     String      @db.Text
+}
+
+model PrecedentDocument {
+  id            String      @id @default(cuid())
+  title         String
+  content       String      @db.Text
+  matterId      String?
+  matter        Matter?     @relation(fields: [matterId], references: [id])
+  documentType  String
+  practiceAreaId String
+  practiceArea  PracticeArea @relation(fields: [practiceAreaId], references: [id])
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  metadata      Json
+  createdById   String
+  createdBy     User        @relation(fields: [createdById], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  citations     Citation[]
+  relatedPrecedents PrecedentRelation[] @relation("SourcePrecedent")
+  referencedBy     PrecedentRelation[] @relation("TargetPrecedent")
+  successRate    Float?
+  usageCount     Int         @default(0)
+}
+
+model PrecedentRelation {
+  id            String      @id @default(cuid())
+  sourcePrecedentId String
+  sourcePrecedent PrecedentDocument @relation("SourcePrecedent", fields: [sourcePrecedentId], references: [id])
+  targetPrecedentId String
+  targetPrecedent PrecedentDocument @relation("TargetPrecedent", fields: [targetPrecedentId], references: [id])
+  relationType   String
+  createdAt     DateTime    @default(now())
+}
+
+model Citation {
+  id            String      @id @default(cuid())
+  precedentId   String
+  precedent     PrecedentDocument @relation(fields: [precedentId], references: [id])
+  citation      String
+  context       String      @db.Text
+  createdAt     DateTime    @default(now())
+}
+
+model DocumentTemplate {
+  id            String      @id @default(cuid())
+  title         String
+  content       String      @db.Text
+  practiceAreaId String
+  practiceArea  PracticeArea @relation(fields: [practiceAreaId], references: [id])
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  documentType  String
+  guidance      String      @db.Text
+  createdById   String
+  createdBy     User        @relation(fields: [createdById], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  versions      TemplateVersion[]
+  usageCount    Int         @default(0)
+  successRate   Float?
+  status        String      @default("draft") // draft, review, approved
+  approvedById  String?
+  approvedBy    User?       @relation("TemplateApprover", fields: [approvedById], references: [id])
+}
+
+model TemplateVersion {
+  id            String      @id @default(cuid())
+  templateId    String
+  template      DocumentTemplate @relation(fields: [templateId], references: [id])
+  content       String      @db.Text
+  createdById   String
+  createdBy     User        @relation(fields: [createdById], references: [id])
+  createdAt     DateTime    @default(now())
+  changeLog     String      @db.Text
+}
+
+model UserContribution {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  articleId     String
+  article       KnowledgeArticle @relation(fields: [articleId], references: [id])
+  contributionType String
+  createdAt     DateTime    @default(now())
+}
+
+model KnowledgeComment {
+  id            String      @id @default(cuid())
+  articleId     String
+  article       KnowledgeArticle @relation(fields: [articleId], references: [id])
+  content       String      @db.Text
+  createdById   String
+  createdBy     User        @relation(fields: [createdById], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model SearchIndex {
+  id            String      @id @default(cuid())
+  contentId     String
+  contentType   String
+  indexedText   String      @db.Text
+  metadata      Json
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([contentType, contentId])
+  @@index([indexedText])
+}
+
+model Recommendation {
+  id            String      @id @default(cuid())
+  contentId     String
+  contentType   String
+  contextId     String
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  accepted      Boolean?
+  createdAt     DateTime    @default(now())
+
+  @@index([userId, contextId])
+  @@index([contentType, contentId])
+}
+
+model PracticeArea {
+  id             String        @id() @default(uuid())
+  title          String
+  description    String?
+  knowledgeArticles KnowledgeArticle[]
+  precedentDocuments PrecedentDocument[]
+  documentTemplates DocumentTemplate[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now()) @updatedAt()
 }
