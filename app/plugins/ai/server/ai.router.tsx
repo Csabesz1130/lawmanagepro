@@ -5,6 +5,7 @@ import axios from 'axios'
 import { z } from 'zod'
 import { Trpc } from '~/core/trpc/base'
 import { UploadServer } from '~/plugins/upload/server'
+import { createTRPCRouter, protectedProcedure } from '~/server/trpc'
 import { AiService } from './ai.service'
 
 /**
@@ -132,5 +133,30 @@ export const AiRouter = Trpc.createRouter({
       const url = urls[0].url
 
       return { url }
+    }),
+})
+
+const aiService = new AiService()
+
+export const aiRouter = createTRPCRouter({
+  getTimeSuggestions: protectedProcedure
+    .input(z.object({ organizationId: z.string() }))
+    .query(async ({ input }) => {
+      return aiService.getTimeSuggestions(input.organizationId)
+    }),
+
+  saveTimeEntry: protectedProcedure
+    .input(
+      z.object({
+        organizationId: z.string(),
+        matterId: z.string(),
+        startTime: z.string(),
+        endTime: z.string(),
+        description: z.string(),
+        activities: z.array(z.string()),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return aiService.saveTimeEntry(input)
     }),
 })

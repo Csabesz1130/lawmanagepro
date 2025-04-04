@@ -1,0 +1,42 @@
+version: '3.8'
+services:
+  database:
+    container_name: postgresql-dev
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: api_dev
+    ports:
+      - '5442:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  pgadmin:
+    container_name: pgadmin4-dev
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    ports:
+      - '5052:80'
+    depends_on:
+      - database
+  mail:
+    container_name: mail-dev
+    image: axllent/mailpit
+    restart: always
+    volumes:
+      - ./data:/data
+    ports:
+      - 8022:8025
+      - 1022:1025
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATA_FILE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+volumes:
+  postgres_data: 

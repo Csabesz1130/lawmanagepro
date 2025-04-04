@@ -1,23 +1,22 @@
-import React, { useState, useEffect } from 'react'
-import {
-  Typography,
-  Button,
-  Input,
-  List,
-  Modal,
-  message,
-  Space,
-  Card,
-  Select,
-} from 'antd'
-const { Title, Text, Paragraph } = Typography
 import { useUserContext } from '@/core/context'
-import dayjs from 'dayjs'
-import { useLocation, useNavigate, useParams } from '@remix-run/react'
-import { useUploadPublic } from '@/plugins/upload/client'
-import { SocketClient } from '@/plugins/socket/client'
 import { Api } from '@/core/trpc'
 import { PageLayout } from '@/designSystem'
+import { useParams } from '@remix-run/react'
+import {
+    Button,
+    Card,
+    Input,
+    List,
+    message,
+    Modal,
+    Select,
+    Space,
+    Typography,
+} from 'antd'
+import dayjs from 'dayjs'
+import { useEffect, useState } from 'react'
+import { SmartTimeTracker } from './SmartTimeTracker'
+const { Title, Text, Paragraph } = Typography
 
 export default function TimeTrackingPage() {
   const { organizationId } = useParams()
@@ -121,6 +120,8 @@ export default function TimeTrackingPage() {
         </Paragraph>
 
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          <SmartTimeTracker />
+
           {!activeTimer && (
             <Card title="Start Time Tracking">
               <Space>

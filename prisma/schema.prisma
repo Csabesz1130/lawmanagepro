@@ -116,23 +116,21 @@ model Task {
 
 /// @@allow('all', true)
 model TimeEntry {
-  id          String   @id() @default(uuid())
-  description String?
-  startTime   String?
-  endTime     String?
-  duration    String?
-  userId      String
-  user        User?    @relation(fields: [userId], references: [id], name: "user")
-  taskId      String?
-  task        Task?    @relation(fields: [taskId], references: [id], name: "task")
-  matterId    String
-  matter      Matter?  @relation(fields: [matterId], references: [id], name: "matter")
-  invoiceId   String?
-  invoice     Invoice? @relation(fields: [invoiceId], references: [id], name: "invoice")
-  rate        String?  // Hourly rate for this time entry
-  amount      String?  // Calculated amount (rate * duration)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt()
+  id             String   @id @default(cuid())
+  organizationId String
+  matterId       String
+  startTime      DateTime
+  endTime        DateTime
+  description    String
+  activities     String[]
+  isAIGenerated  Boolean  @default(false)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  matter         Matter      @relation(fields: [matterId], references: [id])
+
+  @@index([organizationId])
+  @@index([matterId])
+  @@index([startTime])
+  @@index([endTime])
 }
 
 /// @@allow('all', true)
@@ -232,4 +230,20 @@ model PwaSubscription {
   updatedAt DateTime @default(now()) @updatedAt()
   userId    String
   user      User     @relation(fields: [userId], references: [id], name: "user")
+}
+
+model Activity {
+  id             String   @id @default(cuid())
+  organizationId String
+  type           String
+  content        String
+  matterId       String?
+  duration       Int
+  timestamp      DateTime @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  matter         Matter?      @relation(fields: [matterId], references: [id])
+
+  @@index([organizationId])
+  @@index([matterId])
+  @@index([timestamp])
 }
