@@ -1,6 +1,62 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("SERVER_DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  engineType = "binary"
+}
+
 enum UserStatus {
     INVITED
     VERIFIED
+}
+
+enum IntakeFieldType {
+    TEXT
+    TEXTAREA
+    NUMBER
+    DATE
+    SELECT
+    MULTISELECT
+    CHECKBOX
+    RADIO
+    FILE
+    SIGNATURE
+    SECTION_BREAK
+}
+
+enum IntakeSubmissionStatus {
+    PENDING
+    IN_PROGRESS
+    SUBMITTED
+    UNDER_REVIEW
+    REQUIRES_CLIENT_ACTION
+    APPROVED
+    REJECTED
+    ARCHIVED
+}
+
+enum ComplianceCheckType {
+    CONFLICT
+    KYC_AML
+    RESTRICTED_PARTY
+}
+
+enum ComplianceCheckStatus {
+    PENDING
+    PASSED
+    FAILED
+    NEEDS_REVIEW
+}
+
+enum WorkflowStatus {
+    NOT_STARTED
+    IN_PROGRESS
+    STALLED
+    COMPLETED
+    CANCELLED
 }
 
 model User {
@@ -28,6 +84,9 @@ model User {
     tasksAsAssignedUser Task[]             @relation("assignedUser")
     timeEntrys          TimeEntry[]        @relation("user")
     expenses            Expense[]          @relation("user")
+
+    assignedIntakeSubmissions IntakeSubmission[] @relation("assignedUser")
+    checkedComplianceChecks ComplianceCheck[] @relation("checkedByUser")
 
     @@auth()
     @@allow("all", auth().id == this.id)
@@ -77,6 +136,7 @@ model Client {
     matters        Matter[]      @relation("client")
     createdAt      DateTime      @default(now())
     updatedAt      DateTime      @updatedAt @default(now())
+    intakeSubmissions IntakeSubmission[] @relation("client")
     @@allow("all", true)
 }
 
@@ -95,6 +155,7 @@ model Matter {
     tasks          Task[]        @relation("matter")
     timeEntrys     TimeEntry[]   @relation("matter")
     expenses       Expense[]     @relation("matter")
+    intakeSubmissions IntakeSubmission[] @relation("matter")
     createdAt      DateTime      @default(now())
     updatedAt      DateTime      @updatedAt @default(now())
     @@allow("all", true)
@@ -171,6 +232,10 @@ model Organization {
     clients          Client[]           @relation("organization")
     matters          Matter[]           @relation("organization")
 
+    intakeForms      IntakeForm[]       @relation("organization")
+    intakeSubmissions IntakeSubmission[] @relation("organization")
+    intakeWorkflowTemplates IntakeWorkflowTemplate[] @relation("organization")
+
     @@allow('all', auth().globalRole == 'ADMIN')
     @@allow('all', roles?[user == auth() && name == 'owner'])
     @@allow('read', roles?[user == auth()])
@@ -204,5 +269,164 @@ model PwaSubscription {
     user      User     @relation(fields: [userId], references: [id], name: 'user')
 
     @@allow("all", true)
+}
+
+model IntakeForm {
+    id              String            @id @default(cuid())
+    organizationId  String
+    organization    Organization      @relation(fields: [organizationId], references: [id], name: "organization")
+    name            String
+    description     String?
+    practiceAreaId  String?
+    practiceArea    PracticeArea?    @relation(fields: [practiceAreaId], references: [id])
+    version         Int              @default(1)
+    fieldsSchema    Json             @db.JsonB
+    conditionsSchema Json?           @db.JsonB
+    isActive        Boolean          @default(true)
+    fields          IntakeFormField[]
+    submissions     IntakeSubmission[]
+    createdAt       DateTime         @default(now())
+    updatedAt       DateTime         @updatedAt @default(now())
+
+    @@index([organizationId])
+    @@index([practiceAreaId])
+    @@allow('all', true)
+}
+
+model IntakeFormField {
+    id                    String          @id @default(cuid())
+    formId               String
+    form                 IntakeForm      @relation(fields: [formId], references: [id])
+    order                Int
+    label                String
+    type                 IntakeFieldType
+    options              Json?           @db.JsonB
+    isRequired           Boolean         @default(false)
+    conditionalDisplayLogic Json?       @db.JsonB
+    placeholderText      String?
+    helpText            String?
+    submissionFiles     IntakeSubmissionFile[]
+    createdAt           DateTime         @default(now())
+    updatedAt           DateTime         @updatedAt @default(now())
+
+    @@index([formId])
+    @@allow('all', true)
+}
+
+model IntakeSubmission {
+    id                String               @id @default(cuid())
+    organizationId    String
+    organization      Organization         @relation(fields: [organizationId], references: [id], name: "organization")
+    formId            String
+    form              IntakeForm          @relation(fields: [formId], references: [id])
+    formVersion       Int
+    formData          Json                @db.JsonB
+    status            IntakeSubmissionStatus @default(PENDING)
+    submittedAt       DateTime?
+    startedAt         DateTime            @default(now())
+    lastUpdatedAt     DateTime            @updatedAt @default(now())
+    assignedUserId    String?
+    assignedUser      User?               @relation(fields: [assignedUserId], references: [id], name: "assignedUser")
+    clientId          String?
+    client            Client?             @relation(fields: [clientId], references: [id], name: "client")
+    matterId          String?
+    matter            Matter?             @relation(fields: [matterId], references: [id], name: "matter")
+    externalClientId  String?
+    files             IntakeSubmissionFile[]
+    complianceChecks  ComplianceCheck[]
+    workflowInstance  IntakeWorkflowInstance?
+    createdAt         DateTime            @default(now())
+
+    @@index([organizationId])
+    @@index([formId])
+    @@index([clientId])
+    @@index([matterId])
+    @@index([assignedUserId])
+    @@allow('all', true)
+}
+
+model IntakeSubmissionFile {
+    id             String           @id @default(cuid())
+    submissionId   String
+    submission     IntakeSubmission @relation(fields: [submissionId], references: [id])
+    fieldId        String
+    field          IntakeFormField  @relation(fields: [fieldId], references: [id])
+    fileName       String
+    storagePath    String
+    fileSize       Int
+    mimeType       String
+    uploadedAt     DateTime         @default(now())
+
+    @@index([submissionId])
+    @@index([fieldId])
+    @@allow('all', true)
+}
+
+model ComplianceCheck {
+    id             String               @id @default(cuid())
+    submissionId   String
+    submission     IntakeSubmission     @relation(fields: [submissionId], references: [id])
+    checkType      ComplianceCheckType
+    status         ComplianceCheckStatus @default(PENDING)
+    resultData     Json?                @db.JsonB
+    notes          String?              @db.Text
+    checkedAt      DateTime?
+    checkedByUserId String?
+    checkedByUser   User?               @relation(fields: [checkedByUserId], references: [id], name: "checkedByUser")
+    createdAt      DateTime             @default(now())
+    updatedAt      DateTime             @updatedAt @default(now())
+
+    @@index([submissionId])
+    @@index([checkedByUserId])
+    @@allow('all', true)
+}
+
+model IntakeWorkflowTemplate {
+    id             String                @id @default(cuid())
+    organizationId String
+    organization   Organization          @relation(fields: [organizationId], references: [id], name: "organization")
+    name           String
+    description    String?
+    practiceAreaId String?
+    practiceArea   PracticeArea?        @relation(fields: [practiceAreaId], references: [id])
+    steps          Json                 @db.JsonB
+    isActive       Boolean              @default(true)
+    instances      IntakeWorkflowInstance[]
+    createdAt      DateTime             @default(now())
+    updatedAt      DateTime             @updatedAt @default(now())
+
+    @@index([organizationId])
+    @@index([practiceAreaId])
+    @@allow('all', true)
+}
+
+model IntakeWorkflowInstance {
+    id             String                @id @default(cuid())
+    templateId     String
+    template       IntakeWorkflowTemplate @relation(fields: [templateId], references: [id])
+    submissionId   String                @unique
+    submission     IntakeSubmission      @relation(fields: [submissionId], references: [id])
+    currentStepIndex Int                 @default(0)
+    status         WorkflowStatus        @default(NOT_STARTED)
+    stepStatuses   Json                 @db.JsonB
+    startedAt      DateTime             @default(now())
+    completedAt    DateTime?
+    createdAt      DateTime             @default(now())
+    updatedAt      DateTime             @updatedAt @default(now())
+
+    @@index([templateId])
+    @@index([submissionId])
+    @@allow('all', true)
+}
+
+model PracticeArea {
+    id             String        @id @default(uuid())
+    title          String
+    description    String?
+    intakeForms    IntakeForm[]
+    intakeWorkflowTemplates IntakeWorkflowTemplate[]
+    createdAt      DateTime      @default(now())
+    updatedAt      DateTime      @updatedAt @default(now())
+    @@allow('all', true)
 }
 

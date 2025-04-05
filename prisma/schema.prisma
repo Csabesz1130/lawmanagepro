@@ -4,17 +4,63 @@
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 datasource db {
-  provider = "postgresql"
-  url      = env("SERVER_DATABASE_URL")
+    provider = "postgresql"
+    url = env("SERVER_DATABASE_URL")
 }
 
 generator client {
-  provider = "prisma-client-js"
+    provider = "prisma-client-js"
 }
 
 enum UserStatus {
-  INVITED
-  VERIFIED
+    INVITED
+    VERIFIED
+}
+
+enum IntakeFieldType {
+    TEXT
+    TEXTAREA
+    NUMBER
+    DATE
+    SELECT
+    MULTISELECT
+    CHECKBOX
+    RADIO
+    FILE
+    SIGNATURE
+    SECTION_BREAK
+}
+
+enum IntakeSubmissionStatus {
+    PENDING
+    IN_PROGRESS
+    SUBMITTED
+    UNDER_REVIEW
+    REQUIRES_CLIENT_ACTION
+    APPROVED
+    REJECTED
+    ARCHIVED
+}
+
+enum ComplianceCheckType {
+    CONFLICT
+    KYC_AML
+    RESTRICTED_PARTY
+}
+
+enum ComplianceCheckStatus {
+    PENDING
+    PASSED
+    FAILED
+    NEEDS_REVIEW
+}
+
+enum WorkflowStatus {
+    NOT_STARTED
+    IN_PROGRESS
+    STALLED
+    COMPLETED
+    CANCELLED
 }
 
 /// @@auth
@@ -23,201 +69,147 @@ enum UserStatus {
 /// @@allow('create', globalRole != 'ADMIN')
 /// @@allow('read', true)
 model User {
-  id                  String             @id() @default(uuid())
-  name                String?
-  email               String?            @unique()
-  pictureUrl          String?            @default("https://i.imgur.com/ZdJSK3Y.jpeg")
-  tokenInvitation     String?
-  stripeCustomerId    String?
-  status              UserStatus         @default(VERIFIED)
-  globalRole          String             @default("USER")
-  /// @password
-  /// @omit
-  password            String?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @default(now()) @updatedAt()
-  organizationRoles   OrganizationRole[]
-  pwaSubscriptions    PwaSubscription[]  @relation("user")
-  userRoles           UserRole[]         @relation("user")
-  tasksAsAssignedUser Task[]             @relation("assignedUser")
-  timeEntrys          TimeEntry[]        @relation("user")
-  expenses            Expense[]          @relation("user")
-  knowledgeArticles   KnowledgeArticle[]
-  articleVersions     KnowledgeArticleVersion[]
-  precedentDocuments  PrecedentDocument[]
-  documentTemplates   DocumentTemplate[]
-  templateVersions    TemplateVersion[]
-  approvedTemplates   DocumentTemplate[] @relation("TemplateApprover")
-  contributions       UserContribution[]
-  comments            KnowledgeComment[]
-  recommendations     Recommendation[]
+    id String @id() @default(uuid())
+    name String?
+    email String? @unique()
+    pictureUrl String? @default("https://i.imgur.com/ZdJSK3Y.jpeg")
+    tokenInvitation String?
+    stripeCustomerId String?
+    status UserStatus @default(VERIFIED)
+    globalRole String @default("USER")
+    /// @password
+    /// @omit
+    password String?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
+    organizationRoles OrganizationRole[]
+    pwaSubscriptions PwaSubscription[] @relation("user")
+    userRoles UserRole[] @relation("user")
+    tasksAsAssignedUser Task[] @relation("assignedUser")
+    timeEntrys TimeEntry[] @relation("user")
+    expenses Expense[] @relation("user")
+    assignedIntakeSubmissions IntakeSubmission[] @relation("assignedUser")
+    checkedComplianceChecks ComplianceCheck[] @relation("checkedByUser")
 }
 
 /// @@allow('all', true)
 model RoleData {
-  id          String     @id() @default(uuid())
-  name        String
-  description String?
-  userRoles   UserRole[] @relation("role")
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @default(now()) @updatedAt()
+    id String @id() @default(uuid())
+    name String
+    description String?
+    userRoles UserRole[] @relation("role")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
 }
 
 /// @@allow('all', true)
 model UserRole {
-  userId    String
-  user      User?     @relation(fields: [userId], references: [id], name: "user")
-  roleId    String
-  role      RoleData? @relation(fields: [roleId], references: [id], name: "role")
-  id        String    @id() @default(uuid())
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now()) @updatedAt()
+    userId String
+    user User? @relation(fields: [userId], references: [id], name: "user")
+    roleId String
+    role RoleData? @relation(fields: [roleId], references: [id], name: "role")
+    id String @id() @default(uuid())
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
 }
 
 /// @@allow('all', true)
 model Client {
-  id             String        @id() @default(uuid())
-  name           String
-  email          String?
-  phone          String?
-  address        String?
-  organizationId String
-  organization   Organization? @relation(fields: [organizationId], references: [id], name: "organization")
-  matters        Matter[]      @relation("client")
-  invoices       Invoice[]     @relation("client")
-  stripeCustomerId String?     // For client payments
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @default(now()) @updatedAt()
+    id String @id() @default(uuid())
+    name String
+    email String?
+    phone String?
+    address String?
+    organizationId String
+    organization Organization? @relation(fields: [organizationId], references: [id], name: "organization")
+    matters Matter[] @relation("client")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
+    intakeSubmissions IntakeSubmission[] @relation("client")
 }
 
 /// @@allow('all', true)
 model Matter {
-  id             String        @id() @default(uuid())
-  title          String
-  description    String?
-  status         String?
-  clientId       String
-  client         Client?       @relation(fields: [clientId], references: [id], name: "client")
-  organizationId String
-  organization   Organization? @relation(fields: [organizationId], references: [id], name: "organization")
-  tasks          Task[]        @relation("matter")
-  timeEntrys     TimeEntry[]   @relation("matter")
-  expenses       Expense[]     @relation("matter")
-  precedentDocuments PrecedentDocument[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @default(now()) @updatedAt()
-  knowledgeArticles KnowledgeArticle[]
+    id String @id() @default(uuid())
+    title String
+    description String?
+    status String?
+    clientId String
+    client Client? @relation(fields: [clientId], references: [id], name: "client")
+    organizationId String
+    organization Organization? @relation(fields: [organizationId], references: [id], name: "organization")
+    tasks Task[] @relation("matter")
+    timeEntrys TimeEntry[] @relation("matter")
+    expenses Expense[] @relation("matter")
+    intakeSubmissions IntakeSubmission[] @relation("matter")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
 }
 
 /// @@allow('all', true)
 model Task {
-  id             String      @id() @default(uuid())
-  title          String
-  description    String?
-  status         String?
-  dueDate        String?
-  assignedUserId String?
-  assignedUser   User?       @relation(fields: [assignedUserId], references: [id], name: "assignedUser")
-  matterId       String
-  matter         Matter?     @relation(fields: [matterId], references: [id], name: "matter")
-  timeEntrys     TimeEntry[] @relation("task")
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @default(now()) @updatedAt()
+    id String @id() @default(uuid())
+    title String
+    description String?
+    status String?
+    dueDate String?
+    assignedUserId String?
+    assignedUser User? @relation(fields: [assignedUserId], references: [id], name: "assignedUser")
+    matterId String
+    matter Matter? @relation(fields: [matterId], references: [id], name: "matter")
+    timeEntrys TimeEntry[] @relation("task")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
 }
 
 /// @@allow('all', true)
 model TimeEntry {
-  id             String   @id @default(cuid())
-  organizationId String
-  matterId       String
-  startTime      DateTime
-  endTime        DateTime
-  description    String
-  activities     String[]
-  isAIGenerated  Boolean  @default(false)
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  matter         Matter      @relation(fields: [matterId], references: [id])
-
-  @@index([organizationId])
-  @@index([matterId])
-  @@index([startTime])
-  @@index([endTime])
+    id String @id() @default(uuid())
+    description String?
+    startTime String?
+    endTime String?
+    duration String?
+    userId String
+    user User? @relation(fields: [userId], references: [id], name: "user")
+    taskId String?
+    task Task? @relation(fields: [taskId], references: [id], name: "task")
+    matterId String
+    matter Matter? @relation(fields: [matterId], references: [id], name: "matter")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
 }
 
 /// @@allow('all', true)
 model Expense {
-  id          String   @id() @default(uuid())
-  description String?
-  amount      String?
-  date        String?
-  receiptUrl  String?
-  userId      String
-  user        User?    @relation(fields: [userId], references: [id], name: "user")
-  matterId    String
-  matter      Matter?  @relation(fields: [matterId], references: [id], name: "matter")
-  invoiceId   String?
-  invoice     Invoice? @relation(fields: [invoiceId], references: [id], name: "invoice")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt()
-}
-
-/// @@allow('all', true)
-model Invoice {
-  id              String        @id() @default(uuid())
-  invoiceNumber   String        @unique
-  clientId        String
-  client          Client?       @relation(fields: [clientId], references: [id], name: "client")
-  matterId        String
-  matter          Matter?       @relation(fields: [matterId], references: [id], name: "matter")
-  organizationId  String
-  organization    Organization? @relation(fields: [organizationId], references: [id], name: "organization")
-  amount          String
-  tax             String?
-  total           String
-  status          String        @default("DRAFT") // DRAFT, SENT, PAID, OVERDUE, CANCELLED
-  dueDate         String?
-  notes           String?
-  timeEntries     TimeEntry[]   @relation("invoice")
-  expenses        Expense[]     @relation("invoice")
-  payments        Payment[]     @relation("invoice")
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @default(now()) @updatedAt()
-}
-
-/// @@allow('all', true)
-model Payment {
-  id              String        @id() @default(uuid())
-  invoiceId       String
-  invoice         Invoice?      @relation(fields: [invoiceId], references: [id], name: "invoice")
-  amount          String
-  paymentMethod   String        // CREDIT_CARD, BANK_TRANSFER, CHECK, CASH, OTHER
-  paymentDate     String
-  transactionId   String?
-  status          String        @default("COMPLETED") // PENDING, COMPLETED, FAILED, REFUNDED
-  notes           String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @default(now()) @updatedAt()
+    id String @id() @default(uuid())
+    description String?
+    amount String?
+    date String?
+    receiptUrl String?
+    userId String
+    user User? @relation(fields: [userId], references: [id], name: "user")
+    matterId String
+    matter Matter? @relation(fields: [matterId], references: [id], name: "matter")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
 }
 
 /// @@allow('all', auth().globalRole == 'ADMIN')
 /// @@allow('all', roles?[user == auth() && name == 'owner'])
 /// @@allow('read', roles?[user == auth()])
 model Organization {
-  id               String             @id() @default(uuid())
-  name             String
-  pictureUrl       String?            @default("https://i.imgur.com/BgkFiid.jpeg")
-  stripeCustomerId String?
-  stripePublicKey  String?            // For client-side Stripe integration
-  stripeSecretKey  String?            // For server-side Stripe integration
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @default(now()) @updatedAt()
-  roles            OrganizationRole[]
-  clients          Client[]           @relation("organization")
-  matters          Matter[]           @relation("organization")
-  invoices         Invoice[]          @relation("organization")
-  knowledgeArticles KnowledgeArticle[]
-  precedentDocuments PrecedentDocument[]
-  documentTemplates DocumentTemplate[]
+    id String @id() @default(uuid())
+    name String
+    pictureUrl String? @default("https://i.imgur.com/BgkFiid.jpeg")
+    stripeCustomerId String?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
+    roles OrganizationRole[]
+    clients Client[] @relation("organization")
+    matters Matter[] @relation("organization")
+    intakeForms IntakeForm[] @relation("organization")
+    intakeSubmissions IntakeSubmission[] @relation("organization")
+    intakeWorkflowTemplates IntakeWorkflowTemplate[] @relation("organization")
 }
 
 /// @@allow('all', auth().globalRole == 'ADMIN')
@@ -226,203 +218,181 @@ model Organization {
 /// @@allow('read', organization.roles?[user == auth()])
 /// @@allow('delete', auth() == user)
 model OrganizationRole {
-  id             String       @id() @default(uuid())
-  name           String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @default(now()) @updatedAt()
-  userId         String
-  user           User         @relation(fields: [userId], references: [id])
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+    id String @id() @default(uuid())
+    name String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
+    userId String
+    user User @relation(fields: [userId], references: [id])
+    organizationId String
+    organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 /// @@allow('all', true)
 model PwaSubscription {
-  id        String   @id() @default(uuid())
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt()
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], name: "user")
+    id String @id() @default(uuid())
+    content String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
+    userId String
+    user User @relation(fields: [userId], references: [id], name: "user")
 }
 
-model Activity {
-  id             String   @id @default(cuid())
-  organizationId String
-  type           String
-  content        String
-  matterId       String?
-  duration       Int
-  timestamp      DateTime @default(now())
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  matter         Matter?      @relation(fields: [matterId], references: [id])
+/// @@allow('all', true)
+model IntakeForm {
+    id String @id() @default(cuid())
+    organizationId String
+    organization Organization @relation(fields: [organizationId], references: [id], name: "organization")
+    name String
+    description String?
+    practiceAreaId String?
+    practiceArea PracticeArea? @relation(fields: [practiceAreaId], references: [id])
+    version Int @default(1)
+    fieldsSchema Json @db.JsonB()
+    conditionsSchema Json? @db.JsonB()
+    isActive Boolean @default(true)
+    fields IntakeFormField[]
+    submissions IntakeSubmission[]
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
 
-  @@index([organizationId])
-  @@index([matterId])
-  @@index([timestamp])
+    @@index([organizationId])
+    @@index([practiceAreaId])
 }
 
-// Knowledge Management Models
-model KnowledgeArticle {
-  id            String      @id @default(cuid())
-  title         String
-  content       String      @db.Text
-  practiceAreaId String
-  practiceArea  PracticeArea @relation(fields: [practiceAreaId], references: [id])
-  createdById   String
-  createdBy     User        @relation(fields: [createdById], references: [id])
-  organizationId String
-  organization  Organization @relation(fields: [organizationId], references: [id])
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  versions      KnowledgeArticleVersion[]
-  tags          String[]
-  viewCount     Int         @default(0)
-  contributors  UserContribution[]
-  comments      KnowledgeComment[]
+/// @@allow('all', true)
+model IntakeFormField {
+    id String @id() @default(cuid())
+    formId String
+    form IntakeForm @relation(fields: [formId], references: [id])
+    order Int
+    label String
+    type IntakeFieldType
+    options Json? @db.JsonB()
+    isRequired Boolean @default(false)
+    conditionalDisplayLogic Json? @db.JsonB()
+    placeholderText String?
+    helpText String?
+    submissionFiles IntakeSubmissionFile[]
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
+
+    @@index([formId])
 }
 
-model KnowledgeArticleVersion {
-  id            String      @id @default(cuid())
-  articleId     String
-  article       KnowledgeArticle @relation(fields: [articleId], references: [id])
-  content       String      @db.Text
-  createdById   String
-  createdBy     User        @relation(fields: [createdById], references: [id])
-  createdAt     DateTime    @default(now())
-  changeLog     String      @db.Text
+/// @@allow('all', true)
+model IntakeSubmission {
+    id String @id() @default(cuid())
+    organizationId String
+    organization Organization @relation(fields: [organizationId], references: [id], name: "organization")
+    formId String
+    form IntakeForm @relation(fields: [formId], references: [id])
+    formVersion Int
+    formData Json @db.JsonB()
+    status IntakeSubmissionStatus @default(PENDING)
+    submittedAt DateTime?
+    startedAt DateTime @default(now())
+    lastUpdatedAt DateTime @updatedAt() @default(now())
+    assignedUserId String?
+    assignedUser User? @relation(fields: [assignedUserId], references: [id], name: "assignedUser")
+    clientId String?
+    client Client? @relation(fields: [clientId], references: [id], name: "client")
+    matterId String?
+    matter Matter? @relation(fields: [matterId], references: [id], name: "matter")
+    externalClientId String?
+    files IntakeSubmissionFile[]
+    complianceChecks ComplianceCheck[]
+    workflowInstance IntakeWorkflowInstance?
+    createdAt DateTime @default(now())
+
+    @@index([organizationId])
+    @@index([formId])
+    @@index([clientId])
+    @@index([matterId])
+    @@index([assignedUserId])
 }
 
-model PrecedentDocument {
-  id            String      @id @default(cuid())
-  title         String
-  content       String      @db.Text
-  matterId      String?
-  matter        Matter?     @relation(fields: [matterId], references: [id])
-  documentType  String
-  practiceAreaId String
-  practiceArea  PracticeArea @relation(fields: [practiceAreaId], references: [id])
-  organizationId String
-  organization  Organization @relation(fields: [organizationId], references: [id])
-  metadata      Json
-  createdById   String
-  createdBy     User        @relation(fields: [createdById], references: [id])
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  citations     Citation[]
-  relatedPrecedents PrecedentRelation[] @relation("SourcePrecedent")
-  referencedBy     PrecedentRelation[] @relation("TargetPrecedent")
-  successRate    Float?
-  usageCount     Int         @default(0)
+/// @@allow('all', true)
+model IntakeSubmissionFile {
+    id String @id() @default(cuid())
+    submissionId String
+    submission IntakeSubmission @relation(fields: [submissionId], references: [id])
+    fieldId String
+    field IntakeFormField @relation(fields: [fieldId], references: [id])
+    fileName String
+    storagePath String
+    fileSize Int
+    mimeType String
+    uploadedAt DateTime @default(now())
+
+    @@index([submissionId])
+    @@index([fieldId])
 }
 
-model PrecedentRelation {
-  id            String      @id @default(cuid())
-  sourcePrecedentId String
-  sourcePrecedent PrecedentDocument @relation("SourcePrecedent", fields: [sourcePrecedentId], references: [id])
-  targetPrecedentId String
-  targetPrecedent PrecedentDocument @relation("TargetPrecedent", fields: [targetPrecedentId], references: [id])
-  relationType   String
-  createdAt     DateTime    @default(now())
+/// @@allow('all', true)
+model ComplianceCheck {
+    id String @id() @default(cuid())
+    submissionId String
+    submission IntakeSubmission @relation(fields: [submissionId], references: [id])
+    checkType ComplianceCheckType
+    status ComplianceCheckStatus @default(PENDING)
+    resultData Json? @db.JsonB()
+    notes String? @db.Text()
+    checkedAt DateTime?
+    checkedByUserId String?
+    checkedByUser User? @relation(fields: [checkedByUserId], references: [id], name: "checkedByUser")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
+
+    @@index([submissionId])
+    @@index([checkedByUserId])
 }
 
-model Citation {
-  id            String      @id @default(cuid())
-  precedentId   String
-  precedent     PrecedentDocument @relation(fields: [precedentId], references: [id])
-  citation      String
-  context       String      @db.Text
-  createdAt     DateTime    @default(now())
+/// @@allow('all', true)
+model IntakeWorkflowTemplate {
+    id String @id() @default(cuid())
+    organizationId String
+    organization Organization @relation(fields: [organizationId], references: [id], name: "organization")
+    name String
+    description String?
+    practiceAreaId String?
+    practiceArea PracticeArea? @relation(fields: [practiceAreaId], references: [id])
+    steps Json @db.JsonB()
+    isActive Boolean @default(true)
+    instances IntakeWorkflowInstance[]
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
+
+    @@index([organizationId])
+    @@index([practiceAreaId])
 }
 
-model DocumentTemplate {
-  id            String      @id @default(cuid())
-  title         String
-  content       String      @db.Text
-  practiceAreaId String
-  practiceArea  PracticeArea @relation(fields: [practiceAreaId], references: [id])
-  organizationId String
-  organization  Organization @relation(fields: [organizationId], references: [id])
-  documentType  String
-  guidance      String      @db.Text
-  createdById   String
-  createdBy     User        @relation(fields: [createdById], references: [id])
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  versions      TemplateVersion[]
-  usageCount    Int         @default(0)
-  successRate   Float?
-  status        String      @default("draft") // draft, review, approved
-  approvedById  String?
-  approvedBy    User?       @relation("TemplateApprover", fields: [approvedById], references: [id])
+/// @@allow('all', true)
+model IntakeWorkflowInstance {
+    id String @id() @default(cuid())
+    templateId String
+    template IntakeWorkflowTemplate @relation(fields: [templateId], references: [id])
+    submissionId String @unique()
+    submission IntakeSubmission @relation(fields: [submissionId], references: [id])
+    currentStepIndex Int @default(0)
+    status WorkflowStatus @default(NOT_STARTED)
+    stepStatuses Json @db.JsonB()
+    startedAt DateTime @default(now())
+    completedAt DateTime?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
+
+    @@index([templateId])
+    @@index([submissionId])
 }
 
-model TemplateVersion {
-  id            String      @id @default(cuid())
-  templateId    String
-  template      DocumentTemplate @relation(fields: [templateId], references: [id])
-  content       String      @db.Text
-  createdById   String
-  createdBy     User        @relation(fields: [createdById], references: [id])
-  createdAt     DateTime    @default(now())
-  changeLog     String      @db.Text
-}
-
-model UserContribution {
-  id            String      @id @default(cuid())
-  userId        String
-  user          User        @relation(fields: [userId], references: [id])
-  articleId     String
-  article       KnowledgeArticle @relation(fields: [articleId], references: [id])
-  contributionType String
-  createdAt     DateTime    @default(now())
-}
-
-model KnowledgeComment {
-  id            String      @id @default(cuid())
-  articleId     String
-  article       KnowledgeArticle @relation(fields: [articleId], references: [id])
-  content       String      @db.Text
-  createdById   String
-  createdBy     User        @relation(fields: [createdById], references: [id])
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-}
-
-model SearchIndex {
-  id            String      @id @default(cuid())
-  contentId     String
-  contentType   String
-  indexedText   String      @db.Text
-  metadata      Json
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  @@index([contentType, contentId])
-  @@index([indexedText])
-}
-
-model Recommendation {
-  id            String      @id @default(cuid())
-  contentId     String
-  contentType   String
-  contextId     String
-  userId        String
-  user          User        @relation(fields: [userId], references: [id])
-  accepted      Boolean?
-  createdAt     DateTime    @default(now())
-
-  @@index([userId, contextId])
-  @@index([contentType, contentId])
-}
-
+/// @@allow('all', true)
 model PracticeArea {
-  id             String        @id() @default(uuid())
-  title          String
-  description    String?
-  knowledgeArticles KnowledgeArticle[]
-  precedentDocuments PrecedentDocument[]
-  documentTemplates DocumentTemplate[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @default(now()) @updatedAt()
+    id String @id() @default(uuid())
+    title String
+    description String?
+    intakeForms IntakeForm[]
+    intakeWorkflowTemplates IntakeWorkflowTemplate[]
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt() @default(now())
 }
