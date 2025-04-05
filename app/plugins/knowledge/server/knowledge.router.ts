@@ -58,25 +58,29 @@ export const knowledgeRouter = createTRPCRouter({
           title: z.string(),
           content: z.string(),
           practiceAreaId: z.string(),
-          tags: z.array(z.string()),
+          tags: z.array(z.string()).optional(),
         })
       )
-      .mutation(async ({ input, ctx }) => {
+      .mutation(async ({ input }) => {
         const article = await prisma.knowledgeArticle.create({
           data: {
-            ...input,
-            createdById: ctx.session.user.id,
+            organizationId: input.organizationId,
+            title: input.title,
+            content: input.content,
+            practiceAreaId: input.practiceAreaId,
+            tags: input.tags,
           },
         });
 
         await searchService.indexDocument({
-          id: `article-${article.id}`,
+          id: article.id,
           contentId: article.id,
           contentType: 'article',
           title: article.title,
           content: article.content,
           metadata: {
-            practiceAreaId: article.practiceAreaId,
+            practiceArea: article.practiceAreaId,
+            organizationId: article.organizationId,
             tags: article.tags,
             createdAt: article.createdAt.toISOString(),
           },
@@ -89,26 +93,32 @@ export const knowledgeRouter = createTRPCRouter({
       .input(
         z.object({
           id: z.string(),
-          title: z.string(),
-          content: z.string(),
-          practiceAreaId: z.string(),
-          tags: z.array(z.string()),
+          title: z.string().optional(),
+          content: z.string().optional(),
+          practiceAreaId: z.string().optional(),
+          tags: z.array(z.string()).optional(),
         })
       )
       .mutation(async ({ input }) => {
         const article = await prisma.knowledgeArticle.update({
           where: { id: input.id },
-          data: input,
+          data: {
+            title: input.title,
+            content: input.content,
+            practiceAreaId: input.practiceAreaId,
+            tags: input.tags,
+          },
         });
 
         await searchService.indexDocument({
-          id: `article-${article.id}`,
+          id: article.id,
           contentId: article.id,
           contentType: 'article',
           title: article.title,
           content: article.content,
           metadata: {
-            practiceAreaId: article.practiceAreaId,
+            practiceArea: article.practiceAreaId,
+            organizationId: article.organizationId,
             tags: article.tags,
             createdAt: article.createdAt.toISOString(),
           },
@@ -124,30 +134,25 @@ export const knowledgeRouter = createTRPCRouter({
       .input(
         z.object({
           organizationId: z.string(),
-          filters: z.object({
-            practiceArea: z.string().optional(),
-            documentType: z.string().optional(),
-          }),
-          sortBy: z.enum(['date', 'usage', 'success']),
+          practiceAreaId: z.string().optional(),
+          documentType: z.string().optional(),
+          sortBy: z.enum(['relevance', 'date', 'usage']).optional(),
         })
       )
       .query(async ({ input }) => {
-        const orderBy: any = {
-          date: { createdAt: 'desc' },
-          usage: { usageCount: 'desc' },
-          success: { successRate: 'desc' },
-        }[input.sortBy];
-
         return prisma.precedentDocument.findMany({
           where: {
             organizationId: input.organizationId,
-            practiceAreaId: input.filters.practiceArea,
-            documentType: input.filters.documentType,
+            practiceAreaId: input.practiceAreaId,
+            documentType: input.documentType,
           },
           include: {
             practiceArea: true,
+            citations: true,
           },
-          orderBy,
+          orderBy: {
+            updatedAt: 'desc',
+          },
         });
       }),
 
@@ -161,11 +166,7 @@ export const knowledgeRouter = createTRPCRouter({
             citations: true,
             relatedPrecedents: {
               include: {
-                targetPrecedent: {
-                  include: {
-                    practiceArea: true,
-                  },
-                },
+                precedent: true,
               },
             },
           },
@@ -179,23 +180,26 @@ export const knowledgeRouter = createTRPCRouter({
       .input(
         z.object({
           organizationId: z.string(),
-          filters: z.object({
-            practiceArea: z.string().optional(),
-            documentType: z.string().optional(),
-            status: z.enum(['draft', 'review', 'approved']).optional(),
-          }),
+          practiceAreaId: z.string().optional(),
+          documentType: z.string().optional(),
+          status: z.enum(['draft', 'published', 'archived']).optional(),
         })
       )
       .query(async ({ input }) => {
         return prisma.documentTemplate.findMany({
           where: {
             organizationId: input.organizationId,
-            practiceAreaId: input.filters.practiceArea,
-            documentType: input.filters.documentType,
-            status: input.filters.status,
+            practiceAreaId: input.practiceAreaId,
+            documentType: input.documentType,
+            status: input.status,
           },
           include: {
             practiceArea: true,
+            versions: {
+              orderBy: {
+                createdAt: 'desc',
+              },
+            },
           },
           orderBy: {
             updatedAt: 'desc',
@@ -214,7 +218,6 @@ export const knowledgeRouter = createTRPCRouter({
               orderBy: {
                 createdAt: 'desc',
               },
-              take: 1,
             },
           },
         });
@@ -226,29 +229,35 @@ export const knowledgeRouter = createTRPCRouter({
           organizationId: z.string(),
           title: z.string(),
           content: z.string(),
-          guidance: z.string(),
+          guidance: z.string().optional(),
           practiceAreaId: z.string(),
           documentType: z.string(),
-          status: z.enum(['draft', 'review', 'approved']),
+          status: z.enum(['draft', 'published', 'archived']),
         })
       )
-      .mutation(async ({ input, ctx }) => {
+      .mutation(async ({ input }) => {
         const template = await prisma.documentTemplate.create({
           data: {
-            ...input,
-            createdById: ctx.session.user.id,
+            organizationId: input.organizationId,
+            title: input.title,
+            content: input.content,
+            guidance: input.guidance,
+            practiceAreaId: input.practiceAreaId,
+            documentType: input.documentType,
+            status: input.status,
           },
         });
 
         await searchService.indexDocument({
-          id: `template-${template.id}`,
+          id: template.id,
           contentId: template.id,
           contentType: 'template',
           title: template.title,
           content: template.content,
           metadata: {
-            practiceAreaId: template.practiceAreaId,
+            practiceArea: template.practiceAreaId,
             documentType: template.documentType,
+            organizationId: template.organizationId,
             status: template.status,
             createdAt: template.createdAt.toISOString(),
           },
@@ -264,11 +273,38 @@ export const knowledgeRouter = createTRPCRouter({
       .input(
         z.object({
           query: z.string(),
-          filters: z.record(z.string()).optional(),
+          filters: z
+            .object({
+              contentType: z.string().optional(),
+              practiceArea: z.string().optional(),
+              documentType: z.string().optional(),
+            })
+            .optional(),
+          sort: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return searchService.search(input.query, input.filters, input.sort);
+      }),
+  }),
+
+  // Practice Areas
+  practiceAreas: createTRPCRouter({
+    list: protectedProcedure
+      .input(
+        z.object({
+          organizationId: z.string(),
         })
       )
       .query(async ({ input }) => {
-        return searchService.search(input.query, input.filters);
+        return prisma.practiceArea.findMany({
+          where: {
+            organizationId: input.organizationId,
+          },
+          orderBy: {
+            name: 'asc',
+          },
+        });
       }),
   }),
 
@@ -277,30 +313,32 @@ export const knowledgeRouter = createTRPCRouter({
     get: protectedProcedure
       .input(
         z.object({
-          matterId: z.string().optional(),
-          practiceAreaId: z.string().optional(),
-          documentType: z.string().optional(),
-          content: z.string().optional(),
+          userId: z.string(),
+          organizationId: z.string(),
+          limit: z.number().optional(),
         })
       )
-      .query(async ({ input, ctx }) => {
+      .query(async ({ input }) => {
         return recommendationService.getRecommendations(
-          ctx.session.user.id,
-          input
+          input.userId,
+          input.organizationId,
+          input.limit
         );
       }),
 
     feedback: protectedProcedure
       .input(
         z.object({
-          recommendationId: z.string(),
-          accepted: z.boolean(),
+          userId: z.string(),
+          itemId: z.string(),
+          feedback: z.enum(['positive', 'negative']),
         })
       )
       .mutation(async ({ input }) => {
-        return recommendationService.updateRecommendationFeedback(
-          input.recommendationId,
-          input.accepted
+        return recommendationService.updateFeedback(
+          input.userId,
+          input.itemId,
+          input.feedback
         );
       }),
   }),

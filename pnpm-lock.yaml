@@ -21,7 +21,7 @@ importers:
         specifier: ^1.5.3
         version: 1.21.0(ws@8.17.1)
       '@prisma/client':
-        specifier: ^5.19.1
+        specifier: ^5.22.0
         version: 5.22.0(prisma@5.22.0)
       '@react-pdf/renderer':
         specifier: ^3.3.8

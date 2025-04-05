@@ -15,7 +15,7 @@ export class RecommendationService {
     this.searchService = new KnowledgeSearchService();
   }
 
-  async getRecommendations(userId: string, context: Context) {
+  async getRecommendations(userId: string, organizationId: string, limit?: number) {
     // Get user's practice areas and recent interactions
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -32,54 +32,81 @@ export class RecommendationService {
       throw new Error('User not found');
     }
 
-    // Build search filters based on context
-    const filters: Record<string, any> = {};
-    
-    if (context.practiceAreaId) {
-      filters['metadata.practiceArea'] = context.practiceAreaId;
-    }
-    
-    if (context.documentType) {
-      filters['metadata.documentType'] = context.documentType;
-    }
+    // Get user's recent matters
+    const recentMatters = await prisma.matter.findMany({
+      where: {
+        organizationId,
+        assignedToId: userId,
+      },
+      take: 5,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        practiceArea: true,
+      },
+    });
 
-    // Get relevant documents based on content similarity
+    // Build search filters based on user's context
+    const filters: Record<string, any> = {
+      'metadata.organizationId': organizationId,
+    };
+
+    // Get relevant documents based on user's practice areas
     let relevantDocs = [];
-    if (context.content) {
-      const searchResults = await this.searchService.search(
-        context.content,
-        filters,
-        'metadata.usageCount:desc'
-      );
-      relevantDocs = searchResults.hits;
+    if (recentMatters.length > 0) {
+      const practiceAreaIds = recentMatters
+        .map((matter) => matter.practiceAreaId)
+        .filter(Boolean);
+      
+      if (practiceAreaIds.length > 0) {
+        const searchResults = await this.searchService.search(
+          '',
+          {
+            practiceArea: practiceAreaIds[0],
+          },
+          'relevance'
+        );
+        relevantDocs = searchResults;
+      }
     }
 
-    // Get popular documents in the same practice area
+    // Get popular documents
     const popularDocs = await this.searchService.search(
       '',
-      filters,
-      'metadata.usageCount:desc'
+      {
+        organizationId,
+      },
+      'usage'
     );
 
-    // Get successful documents (high success rate)
+    // Get successful documents
     const successfulDocs = await this.searchService.search(
       '',
-      filters,
-      'metadata.successRate:desc'
+      {
+        organizationId,
+      },
+      'success'
     );
 
-    // Combine and rank recommendations
+    // Get user's history
+    const userHistory = user.recommendations.map((rec) => ({
+      id: rec.id,
+      itemId: rec.itemId,
+      feedback: rec.feedback,
+    }));
+
+    // Rank recommendations
     const recommendations = this.rankRecommendations(
       relevantDocs,
-      popularDocs.hits,
-      successfulDocs.hits,
-      user.recommendations
+      popularDocs,
+      successfulDocs,
+      userHistory
     );
 
     // Store recommendations
-    await this.storeRecommendations(userId, context, recommendations);
+    await this.storeRecommendations(userId, organizationId, recommendations);
 
-    return recommendations;
+    // Return top recommendations
+    return recommendations.slice(0, limit || 10);
   }
 
   private rankRecommendations(
@@ -89,97 +116,84 @@ export class RecommendationService {
     userHistory: any[]
   ) {
     // Combine all documents
-    const allDocs = new Map();
+    const allDocs = [...relevantDocs, ...popularDocs, ...successfulDocs];
 
-    // Add relevant docs with high weight
-    relevantDocs.forEach((doc) => {
-      allDocs.set(doc.id, {
+    // Remove duplicates
+    const uniqueDocs = allDocs.filter(
+      (doc, index, self) =>
+        index === self.findIndex((d) => d.id === doc.id)
+    );
+
+    // Rank documents based on various factors
+    const rankedDocs = uniqueDocs.map((doc) => {
+      let score = 0;
+
+      // Relevance score
+      const relevanceIndex = relevantDocs.findIndex((d) => d.id === doc.id);
+      if (relevanceIndex !== -1) {
+        score += (relevantDocs.length - relevanceIndex) * 2;
+      }
+
+      // Popularity score
+      const popularityIndex = popularDocs.findIndex((d) => d.id === doc.id);
+      if (popularityIndex !== -1) {
+        score += (popularDocs.length - popularityIndex);
+      }
+
+      // Success score
+      const successIndex = successfulDocs.findIndex((d) => d.id === doc.id);
+      if (successIndex !== -1) {
+        score += (successfulDocs.length - successIndex) * 1.5;
+      }
+
+      // History score
+      const historyItem = userHistory.find((h) => h.itemId === doc.id);
+      if (historyItem) {
+        if (historyItem.feedback === 'positive') {
+          score += 3;
+        } else if (historyItem.feedback === 'negative') {
+          score -= 2;
+        }
+      }
+
+      return {
         ...doc,
-        score: (doc._score || 0) * 2,
-      });
+        score,
+      };
     });
 
-    // Add popular docs
-    popularDocs.forEach((doc) => {
-      if (allDocs.has(doc.id)) {
-        const existing = allDocs.get(doc.id);
-        existing.score += doc.metadata.usageCount * 0.5;
-      } else {
-        allDocs.set(doc.id, {
-          ...doc,
-          score: doc.metadata.usageCount * 0.5,
-        });
-      }
-    });
-
-    // Add successful docs
-    successfulDocs.forEach((doc) => {
-      if (allDocs.has(doc.id)) {
-        const existing = allDocs.get(doc.id);
-        existing.score += (doc.metadata.successRate || 0) * 0.8;
-      } else {
-        allDocs.set(doc.id, {
-          ...doc,
-          score: (doc.metadata.successRate || 0) * 0.8,
-        });
-      }
-    });
-
-    // Adjust scores based on user history
-    const acceptedDocs = new Set(
-      userHistory
-        .filter((rec) => rec.accepted)
-        .map((rec) => rec.contentId)
-    );
-
-    const rejectedDocs = new Set(
-      userHistory
-        .filter((rec) => rec.accepted === false)
-        .map((rec) => rec.contentId)
-    );
-
-    allDocs.forEach((doc) => {
-      if (acceptedDocs.has(doc.contentId)) {
-        doc.score *= 1.2; // Boost accepted docs
-      }
-      if (rejectedDocs.has(doc.contentId)) {
-        doc.score *= 0.5; // Penalize rejected docs
-      }
-    });
-
-    // Sort by final score
-    return Array.from(allDocs.values()).sort((a, b) => b.score - a.score);
+    // Sort by score
+    return rankedDocs.sort((a, b) => b.score - a.score);
   }
 
   private async storeRecommendations(
     userId: string,
-    context: Context,
+    organizationId: string,
     recommendations: any[]
   ) {
-    const contextId = context.matterId || 'general';
-
-    // Store top recommendations
-    await Promise.all(
-      recommendations.slice(0, 10).map((rec) =>
-        prisma.recommendation.create({
-          data: {
-            userId,
-            contextId,
-            contentId: rec.contentId,
-            contentType: rec.contentType,
-          },
-        })
-      )
-    );
+    // Store recommendations in database
+    await prisma.recommendation.createMany({
+      data: recommendations.map((rec) => ({
+        userId,
+        organizationId,
+        itemId: rec.id,
+        itemType: rec.contentType,
+        score: rec.score,
+      })),
+      skipDuplicates: true,
+    });
   }
 
-  async updateRecommendationFeedback(
-    recommendationId: string,
-    accepted: boolean
-  ) {
-    await prisma.recommendation.update({
-      where: { id: recommendationId },
-      data: { accepted },
+  async updateFeedback(userId: string, itemId: string, feedback: 'positive' | 'negative') {
+    // Update recommendation feedback
+    await prisma.recommendation.updateMany({
+      where: {
+        userId,
+        itemId,
+      },
+      data: {
+        feedback,
+      },
     });
   }
 } 

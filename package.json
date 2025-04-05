@@ -30,7 +30,7 @@
     "@aws-sdk/client-s3": "^3.657.0",
     "@aws-sdk/s3-request-presigner": "^3.657.0",
     "@mendable/firecrawl-js": "^1.5.3",
-    "@prisma/client": "^5.19.1",
+    "@prisma/client": "^5.22.0",
     "@react-pdf/renderer": "^3.3.8",
     "@remix-pwa/push": "^2.10.3",
     "@remix-run/express": "^2.13.1",
