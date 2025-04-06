@@ -4,17 +4,17 @@
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 datasource db {
-    provider = "postgresql"
-    url = env("SERVER_DATABASE_URL")
+  provider = "postgresql"
+    url = env("DATABASE_URL")
 }
 
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 enum UserStatus {
-    INVITED
-    VERIFIED
+  INVITED
+  VERIFIED
 }
 
 enum IntakeFieldType {
@@ -77,8 +77,8 @@ model User {
     stripeCustomerId String?
     status UserStatus @default(VERIFIED)
     globalRole String @default("USER")
-    /// @password
-    /// @omit
+  /// @password
+  /// @omit
     password String?
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt() @default(now())
@@ -96,7 +96,7 @@ model User {
 model RoleData {
     id String @id() @default(uuid())
     name String
-    description String?
+  description String?
     userRoles UserRole[] @relation("role")
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt() @default(now())
@@ -120,7 +120,7 @@ model Client {
     email String?
     phone String?
     address String?
-    organizationId String
+  organizationId String
     organization Organization? @relation(fields: [organizationId], references: [id], name: "organization")
     matters Matter[] @relation("client")
     createdAt DateTime @default(now())
@@ -130,20 +130,17 @@ model Client {
 
 /// @@allow('all', true)
 model Matter {
-    id String @id() @default(uuid())
-    title String
+    id          String       @id @default(cuid())
+    title       String
     description String?
-    status String?
-    clientId String
-    client Client? @relation(fields: [clientId], references: [id], name: "client")
-    organizationId String
-    organization Organization? @relation(fields: [organizationId], references: [id], name: "organization")
-    tasks Task[] @relation("matter")
-    timeEntrys TimeEntry[] @relation("matter")
-    expenses Expense[] @relation("matter")
-    intakeSubmissions IntakeSubmission[] @relation("matter")
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt() @default(now())
+    status      String       @default("active")
+    createdAt   DateTime     @default(now())
+    updatedAt   DateTime     @updatedAt
+    timeEntries TimeEntry[]
+    notes       Note[]
+    events      Event[]
+    documents   Document[]
+    contacts    Contact[]
 }
 
 /// @@allow('all', true)
@@ -153,7 +150,7 @@ model Task {
     description String?
     status String?
     dueDate String?
-    assignedUserId String?
+  assignedUserId String?
     assignedUser User? @relation(fields: [assignedUserId], references: [id], name: "assignedUser")
     matterId String
     matter Matter? @relation(fields: [matterId], references: [id], name: "matter")
@@ -164,25 +161,21 @@ model Task {
 
 /// @@allow('all', true)
 model TimeEntry {
-    id String @id() @default(uuid())
-    description String?
-    startTime String?
-    endTime String?
-    duration String?
-    userId String
-    user User? @relation(fields: [userId], references: [id], name: "user")
-    taskId String?
-    task Task? @relation(fields: [taskId], references: [id], name: "task")
-    matterId String
-    matter Matter? @relation(fields: [matterId], references: [id], name: "matter")
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt() @default(now())
+    id          String   @id @default(cuid())
+    matterId    String
+    matter      Matter   @relation(fields: [matterId], references: [id])
+    startTime   DateTime
+    endTime     DateTime?
+    duration    Int?
+  description String?
+  createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
 }
 
 /// @@allow('all', true)
 model Expense {
     id String @id() @default(uuid())
-    description String?
+  description String?
     amount String?
     date String?
     receiptUrl String?
@@ -201,7 +194,7 @@ model Organization {
     id String @id() @default(uuid())
     name String
     pictureUrl String? @default("https://i.imgur.com/BgkFiid.jpeg")
-    stripeCustomerId String?
+  stripeCustomerId String?
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt() @default(now())
     roles OrganizationRole[]
@@ -224,7 +217,7 @@ model OrganizationRole {
     updatedAt DateTime @updatedAt() @default(now())
     userId String
     user User @relation(fields: [userId], references: [id])
-    organizationId String
+  organizationId String
     organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
@@ -395,4 +388,59 @@ model PracticeArea {
     intakeWorkflowTemplates IntakeWorkflowTemplate[]
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt() @default(now())
+}
+
+/// @@allow('all', true)
+model Note {
+    id        String   @id @default(cuid())
+    matterId  String
+    matter    Matter   @relation(fields: [matterId], references: [id])
+    title     String
+  content   String
+  createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+/// @@allow('all', true)
+model Event {
+    id          String   @id @default(cuid())
+    matterId    String
+    matter      Matter   @relation(fields: [matterId], references: [id])
+    title       String
+    description String?
+    startTime   DateTime
+    endTime     DateTime?
+    location    String?
+    attendees   String[]
+    type        String
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+}
+
+/// @@allow('all', true)
+model Document {
+    id        String   @id @default(cuid())
+    matterId  String
+    matter    Matter   @relation(fields: [matterId], references: [id])
+    title     String
+    content   String?
+    fileUrl   String?
+    type      String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+/// @@allow('all', true)
+model Contact {
+    id           String   @id @default(cuid())
+    matterId     String
+    matter       Matter   @relation(fields: [matterId], references: [id])
+    name         String
+    type         String
+    email        String?
+    phone        String?
+    organization String?
+    notes        String?
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
 }
