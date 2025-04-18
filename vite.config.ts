@@ -35,7 +35,7 @@ export default defineConfig({
       buildEnd: async () => {
         await esbuild
           .build({
-            alias: { '~': './app', '@': './app' },
+            alias: { '~': './app', '@': './app', '@core': './core' },
             outfile: 'build/server/index.js',
             entryPoints: ['server/index.ts'],
             external: ['./build/server/*'],
