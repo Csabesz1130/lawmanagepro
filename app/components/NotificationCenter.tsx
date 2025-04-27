@@ -1,0 +1,71 @@
+import React, { useEffect, useState } from "react";
+
+interface Notification {
+  id: string;
+  title: string;
+  body?: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export const NotificationCenter: React.FC = () => {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [open, setOpen] = useState(false);
+
+  async function fetchNotifications() {
+    const res = await fetch("/api/notifications");
+    if (res.ok) {
+      setNotifications(await res.json());
+    }
+  }
+
+  useEffect(() => {
+    fetchNotifications();
+    // Optionally, poll every 30 seconds:
+    // const interval = setInterval(fetchNotifications, 30000);
+    // return () => clearInterval(interval);
+  }, []);
+
+  async function markAsRead(id: string) {
+    await fetch(`/api/notifications/${id}/read`, { method: "POST" });
+    setNotifications(notifications.map(n =>
+      n.id === id ? { ...n, read: true } : n
+    ));
+  }
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  return (
+    <div className="relative inline-block">
+      <button onClick={() => setOpen(!open)} className="relative focus:outline-none">
+        <svg className="w-6 h-6" fill="none" stroke="currentColor">
+          {/* Bell Icon SVG */}
+          <path d="M..." />
+        </svg>
+        {unreadCount > 0 && (
+          <span className="absolute top-0 right-0 bg-red-500 text-white rounded-full px-2 text-xs">{unreadCount}</span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-80 bg-white shadow-lg border rounded-lg z-50">
+          <div className="p-2 font-bold border-b">Notifications</div>
+          {notifications.length === 0 ? (
+            <div className="p-4 text-gray-500">No notifications.</div>
+          ) : (
+            <ul>
+              {notifications.map(n => (
+                <li key={n.id} className={`p-2 border-b last:border-none cursor-pointer ${n.read ? "bg-gray-100" : "bg-white"}`}
+                  onClick={() => !n.read && markAsRead(n.id)}>
+                  <div className="font-semibold">{n.title}</div>
+                  {n.body && <div className="text-sm">{n.body}</div>}
+                  <div className="text-xs text-gray-400">{new Date(n.createdAt).toLocaleString()}</div>
+                  {!n.read && <span className="inline-block w-2 h-2 bg-blue-500 rounded-full ml-2" />}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
