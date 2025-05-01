@@ -1,15 +1,8 @@
+import { remixPWA } from '@remix-pwa/dev'
 import { vitePlugin as remix } from '@remix-run/dev'
 import esbuild from 'esbuild'
 import { defineConfig } from 'vite'
 import tsconfigPaths from 'vite-tsconfig-paths'
-
-import { remixPWA } from '@remix-pwa/dev'
-
-declare module '@remix-run/node' {
-  interface Future {
-    v3_singleFetch: true
-  }
-}
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -20,6 +13,9 @@ export default defineConfig({
         api: 'modern',
       },
     },
+  },
+  optimizeDeps: {
+    include: ['fs', 'buffer', 'stream', 'zlib', 'url', 'path']
   },
   plugins: [
     remix({
