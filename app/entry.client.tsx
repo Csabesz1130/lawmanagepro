@@ -8,7 +8,7 @@ import { RemixBrowser } from '@remix-run/react'
 import { startTransition } from 'react'
 import { hydrateRoot } from 'react-dom/client'
 
-import '~/designSystem/style/main.scss'
+//import '~/designSystem/style/main.scss'
 
 startTransition(() => {
   hydrateRoot(document, <RemixBrowser />)
