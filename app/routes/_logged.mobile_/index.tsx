@@ -1,6 +1,7 @@
 import { Calendar, Clock, FileText, Plus, Users } from 'lucide-react';
 import { useState } from 'react';
-import { Button, Card } from '~/components/ui/button';
+import { Button } from '~/components/ui/button';
+import { Card } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
 import { VoiceCommandProcessor } from '~/plugins/voice/client/VoiceCommandProcessor';
 
