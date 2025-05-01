@@ -20,13 +20,31 @@
     "react-dom": "^18.2.0",
     "remix": "^2.8.1",
     "tailwind-merge": "^2.6.0",
-    "tailwindcss": "^3.4.1"
+    "tailwindcss": "^3.4.1",
+    "@ant-design/icons": "^5.24.9",
+    "class-variance-authority": "^0.7.0",
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-select": "^1.2.2",
+    "@remix-run/react": "^2.16.4",
+    "@trpc/react-query": "^10.45.2",
+    "@trpc/client": "^10.45.2",
+    "uuid": "^10.0.0",
+    "@tanstack/react-query": "^4.36.1",
+    "superjson": "^2.2.1",
+    "socket.io-client": "^4.8.0",
+    "axios": "^1.7.7",
+    "@stripe/react-stripe-js": "^2.5.1",
+    "@stripe/stripe-js": "^3.0.7",
+    "@react-pdf/renderer": "^3.3.8",
+    "posthog-js": "^1.167.0",
+    "@remix-pwa/push": "^2.10.3"
   },
   "devDependencies": {
     "@remix-run/dev": "^2.8.1",
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.2.19",
     "prisma": "^5.10.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "sass-embedded": "^1.79.3"
   }
 }
