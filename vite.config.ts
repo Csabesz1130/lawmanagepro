@@ -2,6 +2,7 @@ import { remixPWA } from '@remix-pwa/dev'
 import { vitePlugin as remix } from '@remix-run/dev'
 import esbuild from 'esbuild'
 import { defineConfig } from 'vite'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import tsconfigPaths from 'vite-tsconfig-paths'
 
 const isProduction = process.env.NODE_ENV === 'production'
@@ -14,10 +15,12 @@ export default defineConfig({
       },
     },
   },
-  optimizeDeps: {
-    include: ['fs', 'buffer', 'stream', 'zlib', 'url', 'path']
-  },
   plugins: [
+    // Add the nodePolyfills plugin BEFORE the remix plugin
+    nodePolyfills({
+      // Add the polyfills for the Node.js modules
+      include: ['fs', 'buffer', 'stream', 'zlib', 'url', 'path']
+    }),
     remix({
       future: {
         v3_fetcherPersist: true,
@@ -27,6 +30,7 @@ export default defineConfig({
         v3_lazyRouteDiscovery: true,
         unstable_optimizeDeps: true,
       },
+      // Remove the browserNodeBuiltinsPolyfill property
       serverBuildFile: 'remix.js',
       buildEnd: async () => {
         await esbuild
@@ -50,6 +54,5 @@ export default defineConfig({
     tsconfigPaths(),
     
     ...(isProduction ? [remixPWA()] : []),
-    
   ],
 })
