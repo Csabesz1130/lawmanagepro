@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { io, Socket } from "socket.io-client";
 
 interface Notification {
   id: string;
@@ -24,6 +25,17 @@ export const NotificationCenter: React.FC = () => {
     // Optionally, poll every 30 seconds:
     // const interval = setInterval(fetchNotifications, 30000);
     // return () => clearInterval(interval);
+
+    // --- Socket.IO real-time notifications ---
+    const socket: Socket = io();
+    socket.on("notification:new", (data: any) => {
+      // Optionally, you can re-fetch notifications or optimistically add
+      // For now, let's re-fetch to keep it simple
+      fetchNotifications();
+    });
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   async function markAsRead(id: string) {
