@@ -1,10 +1,16 @@
+import { SocketBase } from '../plugins/socket/base';
 import { db } from './db';
 
 export async function createNotification(userId: string, title: string, body?: string) {
-  return db.query(
+  const result = await db.query(
     'INSERT INTO notifications (user_id, title, body, read_at) VALUES (?, ?, ?, NULL)',
     [userId, title, body]
   );
+
+  // Emit real-time notification event
+  SocketBase.service.emit('notification:new', { title, body }, [userId]);
+
+  return result;
 }
 
 export async function listNotifications(userId: string, unreadOnly: boolean = false) {
