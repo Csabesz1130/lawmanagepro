@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 
 interface Notification {
@@ -12,6 +12,8 @@ interface Notification {
 export const NotificationCenter: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
+  const [toast, setToast] = useState<{ title: string; body?: string } | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   async function fetchNotifications() {
     const res = await fetch("/api/notifications");
@@ -29,14 +31,25 @@ export const NotificationCenter: React.FC = () => {
     // --- Socket.IO real-time notifications ---
     const socket: Socket = io();
     socket.on("notification:new", (data: any) => {
-      // Optionally, you can re-fetch notifications or optimistically add
-      // For now, let's re-fetch to keep it simple
+      setToast({ title: data.payload.title, body: data.payload.body });
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play();
+      }
       fetchNotifications();
     });
     return () => {
       socket.disconnect();
     };
   }, []);
+
+  // Hide toast after 4 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   async function markAsRead(id: string) {
     await fetch(`/api/notifications/${id}/read`, { method: "POST" });
@@ -49,6 +62,15 @@ export const NotificationCenter: React.FC = () => {
 
   return (
     <div className="relative inline-block">
+      {/* Notification sound */}
+      <audio ref={audioRef} src="/notification.mp3" preload="auto" />
+      {/* Toast popup */}
+      {toast && (
+        <div className="fixed top-4 right-4 bg-blue-600 text-white px-4 py-3 rounded shadow-lg z-50 animate-fade-in">
+          <div className="font-bold">{toast.title}</div>
+          {toast.body && <div className="text-sm">{toast.body}</div>}
+        </div>
+      )}
       <button onClick={() => setOpen(!open)} className="relative focus:outline-none">
         <svg className="w-6 h-6" fill="none" stroke="currentColor">
           {/* Bell Icon SVG */}
