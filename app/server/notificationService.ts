@@ -1,3 +1,4 @@
+import { PwaService } from '../plugins/pwa/server/pwa.service';
 import { SocketBase } from '../plugins/socket/base';
 import { db } from './db';
 
@@ -9,6 +10,13 @@ export async function createNotification(userId: string, title: string, body?: s
 
   // Emit real-time notification event
   SocketBase.service.emit('notification:new', { title, body }, [userId]);
+
+  // Send push notification
+  const pwaSubscriptions = await db.query('SELECT content FROM pwa_subscriptions WHERE user_id = ?', [userId]);
+  if (pwaSubscriptions.length > 0) {
+    const subscriptions = pwaSubscriptions.map(sub => JSON.parse(sub.content));
+    PwaService.sendNotifications(subscriptions, title, body || '');
+  }
 
   return result;
 }
