@@ -6,7 +6,11 @@
     "build": "remix build",
     "dev": "remix dev",
     "start": "remix-serve build",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "manage": "tsx scripts/manage.ts",
+    "seed": "tsx scripts/seed.ts all",
+    "seed:dev": "tsx scripts/seed.ts all --flush --random",
+    "check": "tsx scripts/check.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
