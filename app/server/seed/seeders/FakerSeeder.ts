@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker'
 import { CaseStatus, Priority, TaskStatus } from '@prisma/client'
-import { Seeder, prisma } from '../index'
+import { Seeder, prisma } from '../base'
 
 /**
  * Faker seeder class that generates random test data using Faker
@@ -75,6 +75,6 @@ export class FakerSeeder extends Seeder {
     }
 
     this.log(`✅ Created ${created} random cases`, 'success')
-    this.logExecutionTime('Random data generation')
+    this.logTime('Random data generation')
   }
 }

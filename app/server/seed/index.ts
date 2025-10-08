@@ -1,177 +1,88 @@
-import { PrismaClient } from '@prisma/client'
-import { readFileSync } from 'fs'
-import { join } from 'path'
+import { prisma } from './base'
+import { CaseSeeder } from './seeders/CaseSeeder'
+import { FakerSeeder } from './seeders/FakerSeeder'
+import { OrganizationSeeder } from './seeders/OrganizationSeeder'
 
 /**
- * Prisma client instance for database operations
+ * Seed orchestrator that manages all seeders
  */
-export const prisma = new PrismaClient()
-
-/**
- * Base abstract class for all seeders
- * Provides common functionality for data seeding operations
- */
-export abstract class Seeder {
-  /** Directory containing seed data JSON files */
-  protected readonly dataDir: string = './data'
-
-  /** Start time for tracking execution duration */
-  protected startTime: number = Date.now()
-
+export class SeedOrchestrator {
   /**
-   * Random utility object with helper methods for generating random data
+   * Flush the database by deleting all records
    */
-  protected random = {
-    /**
-     * Generate a random integer between min (inclusive) and max (inclusive)
-     * @param min Minimum value
-     * @param max Maximum value
-     * @returns Random integer
-     */
-    int: (min: number, max: number): number => {
-      return Math.floor(Math.random() * (max - min + 1)) + min
-    },
+  static async flush(): Promise<void> {
+    console.log('\n⚠️  Flushing database...\n')
 
-    /**
-     * Select a random element from an array
-     * @param array Array to choose from
-     * @returns Random element from array
-     */
-    choice: <T>(array: T[]): T => {
-      return array[Math.floor(Math.random() * array.length)]
-    },
+    // Delete in correct order (respect foreign keys)
+    await prisma.notification.deleteMany()
+    await prisma.webhookSubscription.deleteMany()
+    await prisma.webhook.deleteMany()
+    await prisma.timeEntry.deleteMany()
+    await prisma.document.deleteMany()
+    await prisma.task.deleteMany()
+    await prisma.case.deleteMany()
+    await prisma.user.deleteMany()
+    await prisma.organization.deleteMany()
 
-    /**
-     * Generate a random date between start and end dates
-     * @param start Start date
-     * @param end End date
-     * @returns Random date between start and end
-     */
-    date: (start: Date, end: Date): Date => {
-      const startTime = start.getTime()
-      const endTime = end.getTime()
-      const randomTime = startTime + Math.random() * (endTime - startTime)
-      return new Date(randomTime)
-    },
-
-    /**
-     * Generate a random boolean value
-     * @param probability Probability of returning true (0-1, default 0.5)
-     * @returns Random boolean
-     */
-    boolean: (probability: number = 0.5): boolean => {
-      return Math.random() < probability
-    },
+    console.log('✅ Database flushed\n')
   }
 
   /**
-   * Load JSON data from a file in the data directory
-   * @param filename Name of the JSON file (without extension)
-   * @returns Parsed JSON data
+   * Seed all data with options
    */
-  protected loadData<T>(filename: string): T {
-    try {
-      const filePath = join(this.dataDir, `${filename}.json`)
-      const fileContent = readFileSync(filePath, 'utf-8')
-      return JSON.parse(fileContent) as T
-    } catch (error) {
-      this.log(`Failed to load data from ${filename}.json: ${error}`, 'error')
-      throw error
-    }
-  }
-
-  /**
-   * Log a message with colored output to console
-   * @param message Message to log
-   * @param type Type of log message
-   */
-  protected log(
-    message: string,
-    type: 'info' | 'success' | 'warning' | 'error',
-  ): void {
-    const colors = {
-      info: '\x1b[36m', // Cyan
-      success: '\x1b[32m', // Green
-      warning: '\x1b[33m', // Yellow
-      error: '\x1b[31m', // Red
-    }
-
-    const reset = '\x1b[0m'
-    const timestamp = new Date().toISOString()
-    const prefix = `[${timestamp}] [${this.constructor.name}]`
-
-    console.log(`${colors[type]}${prefix} ${message}${reset}`)
-  }
-
-  /**
-   * Log the execution time for a specific operation
-   * @param label Label for the operation
-   */
-  protected logExecutionTime(label: string): void {
-    const executionTime = Date.now() - this.startTime
-    const seconds = (executionTime / 1000).toFixed(2)
-    this.log(`${label} completed in ${seconds}s`, 'success')
-  }
-
-  /**
-   * Check if prerequisites are met before seeding
-   * Override this method in subclasses to add specific checks
-   * @returns Promise resolving to true if prerequisites are met
-   */
-  protected async checkPrerequisites(): Promise<boolean> {
-    try {
-      // Basic database connectivity check
-      await prisma.$queryRaw`SELECT 1`
-      this.log('Database connection verified', 'success')
-      return true
-    } catch (error) {
-      this.log(`Prerequisites check failed: ${error}`, 'error')
-      return false
-    }
-  }
-
-  /**
-   * Safely execute a function with error handling
-   * @param fn Function to execute
-   * @param errorMessage Error message to display if execution fails
-   */
-  protected async safeExecute(
-    fn: () => Promise<void>,
-    errorMessage: string,
+  static async seedAll(
+    options: {
+      flush?: boolean
+      random?: boolean
+      randomCount?: number
+    } = {},
   ): Promise<void> {
-    try {
-      await fn()
-    } catch (error) {
-      this.log(`${errorMessage}: ${error}`, 'error')
-      throw error
-    }
-  }
-
-  /**
-   * Abstract method that must be implemented by subclasses
-   * Contains the main seeding logic
-   */
-  abstract seed(): Promise<void>
-
-  /**
-   * Run the seeder with proper setup and teardown
-   * This method should be called to execute the seeding process
-   */
-  async run(): Promise<void> {
-    this.startTime = Date.now()
-    this.log('Starting seeder execution', 'info')
+    const start = Date.now()
+    console.log('\n🌱 Starting database seeding...\n')
 
     try {
-      const prerequisitesMet = await this.checkPrerequisites()
-      if (!prerequisitesMet) {
-        throw new Error('Prerequisites not met')
+      if (options.flush) {
+        await this.flush()
       }
 
-      await this.seed()
-      this.logExecutionTime('Seeder execution')
+      // Seed in order
+      await new OrganizationSeeder().seed()
+      await new CaseSeeder().seed()
+
+      if (options.random) {
+        await new FakerSeeder(options.randomCount || 20).seed()
+      }
+
+      const duration = ((Date.now() - start) / 1000).toFixed(2)
+      console.log(`\n🎉 Seeding completed in ${duration}s!\n`)
     } catch (error) {
-      this.log(`Seeder execution failed: ${error}`, 'error')
+      console.error('\n❌ Seeding failed:', error)
       throw error
+    } finally {
+      await prisma.$disconnect()
+    }
+  }
+
+  /**
+   * Seed a specific component
+   */
+  static async seedComponent(name: string): Promise<void> {
+    console.log(`\n🌱 Seeding ${name}...\n`)
+
+    try {
+      switch (name) {
+        case 'organizations':
+          await new OrganizationSeeder().seed()
+          break
+        case 'cases':
+          await new CaseSeeder().seed()
+          break
+        case 'random':
+          await new FakerSeeder().seed()
+          break
+        default:
+          throw new Error(`Unknown component: ${name}`)
+      }
     } finally {
       await prisma.$disconnect()
     }

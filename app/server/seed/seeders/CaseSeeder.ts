@@ -1,5 +1,5 @@
 import { CaseStatus, Priority, TaskStatus } from '@prisma/client'
-import { Seeder, prisma } from '../index'
+import { Seeder, prisma } from '../base'
 
 /**
  * Interface for task data structure
@@ -152,6 +152,6 @@ export class CaseSeeder extends Seeder {
       `✅ Created ${caseCount} cases, ${taskCount} tasks, ${timeCount} time entries`,
       'success',
     )
-    this.logExecutionTime('Case seeding')
+    this.logTime('Case seeding')
   }
 }
