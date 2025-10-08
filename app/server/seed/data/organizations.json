@@ -1,3 +1,44 @@
 {
-  "organizations": []
+  "organizations": [
+    {
+      "name": "Smith & Associates Law Firm",
+      "owner": {
+        "email": "john.smith@smithlaw.com",
+        "password": "Password123!",
+        "firstName": "John",
+        "lastName": "Smith"
+      },
+      "members": [
+        {
+          "email": "sarah.johnson@smithlaw.com",
+          "password": "Password123!",
+          "firstName": "Sarah",
+          "lastName": "Johnson"
+        },
+        {
+          "email": "mike.davis@smithlaw.com",
+          "password": "Password123!",
+          "firstName": "Mike",
+          "lastName": "Davis"
+        }
+      ]
+    },
+    {
+      "name": "Martinez Legal Group",
+      "owner": {
+        "email": "elena.martinez@martinezlegal.com",
+        "password": "Password123!",
+        "firstName": "Elena",
+        "lastName": "Martinez"
+      },
+      "members": [
+        {
+          "email": "david.kim@martinezlegal.com",
+          "password": "Password123!",
+          "firstName": "David",
+          "lastName": "Kim"
+        }
+      ]
+    }
+  ]
 }
